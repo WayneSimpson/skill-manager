@@ -18,3 +18,20 @@ retrieve live runtime state, or include plugin-added paths. A later task should
 add live retrieval only when the caller needs the effective runtime
 configuration. The resolver does not change the existing MCP mutation paths;
 in particular, the XDG `.jsonc` path is not added to MCP write discovery here.
+
+## Task 02 skill discovery
+
+Skill Manager reads the merged `skills.paths` list from this resolver for
+OpenCode skill discovery only. It accepts only absolute string paths that are
+currently directories; malformed values, missing directories, and paths that
+cannot be inspected are skipped independently. Relative paths are skipped
+because this static global inventory has no OpenCode project directory against
+which to resolve them. The canonical OpenCode root (including its environment
+override) and the Claude/Agents compatibility roots remain in the scan, and
+physical duplicate roots (including symlinks) are scanned once.
+
+Configured roots are read again when a skills scan is performed, so changes to
+the static config are visible after the normal read-model refresh. They are
+never used as enable/disable mutation targets. This remains discovery-only: it
+does not invoke OpenCode, use live APIs or plugins, mutate user config, or
+change MCP behavior.

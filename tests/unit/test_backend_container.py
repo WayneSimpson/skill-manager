@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
@@ -48,6 +49,31 @@ class _StaticGitHubSource:
 
 
 class BackendContainerServiceTests(unittest.TestCase):
+    def test_opencode_configured_skill_enters_inventory_with_configured_provenance(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            spec = create_fake_home_spec(Path(temp_dir))
+            configured_root = spec.root / "configured"
+            configured_skill = seed_skill_package(configured_root, "configured", "Configured Skill")
+            config_path = spec.home / ".opencode" / "opencode.jsonc"
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            config_path.write_text(
+                json.dumps({"skills": {"paths": [str(configured_root)]}}),
+                encoding="utf-8",
+            )
+
+            container = build_backend_container(spec.env())
+            payload = container.skills_queries.list_skills()
+            row = next(row for row in payload["rows"] if row["name"] == "Configured Skill")
+            detail = container.skills_queries.get_skill_detail(row["skillRef"])
+            container.db.close()
+
+        assert detail is not None
+        configured_locations = [
+            location for location in detail["locations"] if location["scope"] == "configured"
+        ]
+        self.assertEqual(len(configured_locations), 1)
+        self.assertEqual(configured_locations[0]["path"], str(configured_skill))
+
     def test_list_skills_groups_identical_local_copies_and_emits_two_public_statuses(self) -> None:
         with TemporaryDirectory() as temp_dir:
             spec = create_fake_home_spec(Path(temp_dir))

@@ -13,6 +13,7 @@ from skill_manager.harness.contracts import ConfigSubtreeBindingProfile
 from skill_manager.opencode.resolver import (
     OpenCodeConfigResolution,
     opencode_config_paths,
+    opencode_skill_paths,
     resolve_opencode_config,
 )
 
@@ -136,6 +137,39 @@ class OpenCodeResolverTests(unittest.TestCase):
         self.assertEqual(result.config, {})
         self.assertEqual(result.sources[1].status, "invalid")
         self.assertIn("expected an object", result.sources[1].diagnostic or "")
+
+    def test_skill_paths_keep_absolute_directories_and_skip_invalid_entries(self) -> None:
+        with TemporaryDirectory() as temp:
+            root = Path(temp)
+            valid = root / "valid"
+            valid.mkdir()
+            config = root / "xdg" / "opencode" / "opencode.json"
+            config.parent.mkdir(parents=True)
+            config.write_text(
+                json.dumps(
+                    {
+                        "skills": {
+                            "paths": [
+                                str(valid),
+                                "relative/path",
+                                str(root / "missing"),
+                                None,
+                                42,
+                            ]
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            paths = opencode_skill_paths(
+                resolve_context({
+                    "HOME": str(root / "home"),
+                    "XDG_CONFIG_HOME": str(root / "xdg"),
+                })
+            )
+
+        self.assertEqual(paths, (valid,))
 
     def test_unreadable_source_is_reported_without_raising(self) -> None:
         with TemporaryDirectory() as temp:

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import shutil
 from tempfile import TemporaryDirectory
+from unittest import mock
 import unittest
 
+import skill_manager.application.skills.adapters as skills_adapters
 from skill_manager.application.skills.adapters import build_skills_adapters
 from skill_manager.directory_links import create_directory_link, is_directory_link
 from skill_manager.errors import MutationError
@@ -19,6 +22,26 @@ def _adapter(harness: str, spec) :
         support_store=HarnessSupportStore(spec.root / "settings.json"),
     )
     return next(adapter for adapter in build_skills_adapters(kernel) if adapter.harness == harness)
+
+
+def _opencode_adapter(spec, *, managed_root: Path | None = None):
+    env = spec.env()
+    if managed_root is not None:
+        env["SKILL_MANAGER_OPENCODE_ROOT"] = str(managed_root)
+    kernel = HarnessKernelService.from_environment(
+        env,
+        support_store=HarnessSupportStore(spec.root / "settings.json"),
+    )
+    return next(
+        adapter for adapter in build_skills_adapters(kernel) if adapter.harness == "opencode"
+    )
+
+
+def _write_opencode_config(spec, paths: list[object], *, name: str = "opencode.jsonc") -> Path:
+    config_path = spec.home / ".opencode" / name
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(json.dumps({"skills": {"paths": paths}}), encoding="utf-8")
+    return config_path
 
 
 class SkillsAdapterTests(unittest.TestCase):
@@ -192,6 +215,192 @@ class SkillsAdapterTests(unittest.TestCase):
             self.assertTrue(cursor.status().installed)
             self.assertTrue(cursor_status.installed)
             self.assertEqual(cursor_status.managed_location, spec.cursor_root)
+
+    def test_opencode_scans_multiple_configured_skill_roots_with_provenance(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            spec = create_fake_home_spec(Path(temp_dir))
+            first = spec.root / "configured-first"
+            second = spec.root / "configured-second"
+            seed_skill_package(first, "first", "Configured First")
+            seed_skill_package(second, "second", "Configured Second")
+            _write_opencode_config(spec, [str(first), str(second)])
+
+            scan = _opencode_adapter(spec).scan()
+
+        self.assertEqual(
+            [skill.package.declared_name for skill in scan.skills],
+            ["Configured First", "Configured Second"],
+        )
+        self.assertEqual({skill.scope for skill in scan.skills}, {"configured"})
+        self.assertEqual(
+            {skill.package.source.locator for skill in scan.skills},
+            {"opencode:configured:first", "opencode:configured:second"},
+        )
+
+    def test_opencode_configured_roots_preserve_canonical_compat_and_dedupe_physical_paths(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            spec = create_fake_home_spec(Path(temp_dir))
+            managed_root = spec.root / "managed-opencode"
+            configured_unique = spec.root / "configured-unique"
+            managed_link = spec.root / "managed-link"
+            seed_skill_package(managed_root, "managed", "Managed")
+            seed_skill_package(spec.home / ".claude" / "skills", "claude", "Claude Compatible")
+            seed_skill_package(spec.home / ".agents" / "skills", "agents", "Agents Compatible")
+            seed_skill_package(configured_unique, "configured", "Configured")
+            create_directory_link(managed_link, managed_root)
+            _write_opencode_config(
+                spec,
+                [
+                    str(managed_root),
+                    str(spec.home / ".claude" / "skills"),
+                    str(spec.home / ".agents" / "skills"),
+                    str(managed_link),
+                    str(configured_unique),
+                ],
+            )
+
+            scan = _opencode_adapter(spec, managed_root=managed_root).scan()
+
+        sightings = {
+            skill.package.declared_name: (skill.scope, skill.package.root_path)
+            for skill in scan.skills
+        }
+        self.assertEqual(sightings["Managed"][0], "canonical")
+        self.assertEqual(sightings["Claude Compatible"][0], "claude-compat")
+        self.assertEqual(sightings["Agents Compatible"][0], "agents-compat")
+        self.assertEqual(sightings["Configured"][0], "configured")
+        self.assertEqual(len(scan.skills), 4)
+        self.assertNotIn(managed_link, {path for _, path in sightings.values()})
+
+    def test_opencode_skips_malformed_missing_and_unreadable_configured_roots_individually(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            spec = create_fake_home_spec(Path(temp_dir))
+            valid_first = spec.root / "valid-first"
+            valid_second = spec.root / "valid-second"
+            missing = spec.root / "missing"
+            unreadable = spec.root / "unreadable"
+            not_a_directory = spec.root / "not-a-directory"
+            seed_skill_package(valid_first, "first", "Valid First")
+            seed_skill_package(valid_second, "second", "Valid Second")
+            unreadable.mkdir()
+            not_a_directory.write_text("not a directory", encoding="utf-8")
+            _write_opencode_config(
+                spec,
+                [
+                    str(valid_first),
+                    None,
+                    42,
+                    {"path": str(valid_second)},
+                    "relative/path",
+                    str(missing),
+                    str(unreadable),
+                    str(not_a_directory),
+                    str(valid_second),
+                ],
+            )
+
+            original_is_dir = Path.is_dir
+
+            def is_dir(path: Path) -> bool:
+                if path == unreadable:
+                    raise PermissionError("test unreadable root")
+                return original_is_dir(path)
+
+            with mock.patch.object(Path, "is_dir", is_dir):
+                scan = _opencode_adapter(spec).scan()
+
+        self.assertEqual(
+            [skill.package.declared_name for skill in scan.skills],
+            ["Valid First", "Valid Second"],
+        )
+
+    def test_opencode_invalid_higher_precedence_config_keeps_lower_configured_roots(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            spec = create_fake_home_spec(Path(temp_dir))
+            configured = spec.root / "configured"
+            seed_skill_package(configured, "configured", "Configured")
+            _write_opencode_config(spec, [str(configured)])
+            invalid_config = spec.xdg_config_home / "opencode" / "opencode.json"
+            invalid_config.parent.mkdir(parents=True, exist_ok=True)
+            invalid_config.write_text("{not valid", encoding="utf-8")
+
+            scan = _opencode_adapter(spec).scan()
+
+        self.assertEqual([skill.package.declared_name for skill in scan.skills], ["Configured"])
+
+    def test_opencode_unreadable_configured_package_does_not_hide_other_packages(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            spec = create_fake_home_spec(Path(temp_dir))
+            configured = spec.root / "configured"
+            unreadable = seed_skill_package(configured, "a-unreadable", "Unreadable")
+            readable = seed_skill_package(configured, "b-readable", "Readable")
+            _write_opencode_config(spec, [str(configured)])
+            original_parse = skills_adapters.parse_skill_package
+
+            def parse_skill_package(root: Path, *, default_source):
+                if root == unreadable:
+                    raise PermissionError("test unreadable package")
+                return original_parse(root, default_source=default_source)
+
+            with mock.patch.object(
+                skills_adapters,
+                "parse_skill_package",
+                side_effect=parse_skill_package,
+            ):
+                scan = _opencode_adapter(spec).scan()
+
+        self.assertEqual([skill.package.declared_name for skill in scan.skills], ["Readable"])
+        self.assertEqual(scan.skills[0].package.root_path, readable)
+
+    def test_existing_harness_package_errors_are_not_swallowed(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            spec = create_fake_home_spec(Path(temp_dir))
+            seed_skill_package(spec.codex_legacy_root, "codex-skill", "Codex Skill")
+            codex = _adapter("codex", spec)
+
+            with mock.patch.object(
+                skills_adapters,
+                "parse_skill_package",
+                side_effect=PermissionError("test existing package error"),
+            ):
+                with self.assertRaises(PermissionError):
+                    codex.scan()
+
+    def test_opencode_config_changes_are_seen_on_the_next_scan(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            spec = create_fake_home_spec(Path(temp_dir))
+            first = spec.root / "configured-first"
+            second = spec.root / "configured-second"
+            seed_skill_package(first, "first", "Configured First")
+            seed_skill_package(second, "second", "Configured Second")
+            config_path = _write_opencode_config(spec, [str(first)])
+            adapter = _opencode_adapter(spec)
+
+            first_scan = adapter.scan()
+            config_path.write_text(
+                json.dumps({"skills": {"paths": [str(second)]}}),
+                encoding="utf-8",
+            )
+            second_scan = adapter.scan()
+
+        self.assertEqual([skill.package.declared_name for skill in first_scan.skills], ["Configured First"])
+        self.assertEqual([skill.package.declared_name for skill in second_scan.skills], ["Configured Second"])
+
+    def test_opencode_configured_roots_are_discovery_only_for_enable_and_disable(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            spec = create_fake_home_spec(Path(temp_dir))
+            configured = spec.root / "configured"
+            configured.mkdir()
+            _write_opencode_config(spec, [str(configured)])
+            package = seed_skill_package(spec.skills_store_root, "audit", "Audit")
+            opencode = _opencode_adapter(spec)
+
+            opencode.enable_shared_package(package)
+            opencode.disable_shared_package("audit")
+
+        self.assertFalse((configured / "audit").exists())
+        self.assertFalse(is_directory_link(configured / "audit"))
+        self.assertFalse(is_directory_link(spec.opencode_root / "audit"))
 
     def test_enable_creates_symlink(self) -> None:
         with TemporaryDirectory() as temp_dir:

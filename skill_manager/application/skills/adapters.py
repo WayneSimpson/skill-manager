@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 import json
@@ -19,6 +20,7 @@ from skill_manager.harness import (
     FileTreeBindingProfile,
     FileTreeLayout,
     HarnessKernelService,
+    ResolutionContext,
 )
 from skill_manager.harness.availability import any_command_is_available
 from skill_manager.platform_context import PlatformName
@@ -45,6 +47,7 @@ class FileTreeSkillsAdapter(SkillsHarnessAdapter):
         app_probe_paths: tuple[Path, ...],
         layout: FileTreeLayout = "flat",
         default_category: str | None = None,
+        discovery_roots_resolver: Callable[[], tuple["_ResolvedRoot", ...]] | None = None,
     ) -> None:
         self.harness = harness
         self.label = label
@@ -54,6 +57,7 @@ class FileTreeSkillsAdapter(SkillsHarnessAdapter):
         self._platform = platform
         self.managed_root = managed_root
         self._discovery_roots = self._dedupe_roots(discovery_roots)
+        self._discovery_roots_resolver = discovery_roots_resolver
         self._availability = availability
         self._app_probe_paths = app_probe_paths
         self._layout = layout
@@ -69,13 +73,16 @@ class FileTreeSkillsAdapter(SkillsHarnessAdapter):
         )
 
     def scan(self) -> SkillsHarnessScan:
+        discovery_roots = self._discovery_roots
+        if self._discovery_roots_resolver is not None:
+            discovery_roots = self._dedupe_roots(self._discovery_roots_resolver())
         hermes_policy = (
             _hermes_scan_policy(self.managed_root) if self.harness == "hermes" else None
         )
         observations, skipped_skill_names = _scan_skill_roots(
             harness=self.harness,
             label=self.label,
-            roots=self._discovery_roots,
+            roots=discovery_roots,
             excluded_skill_names=(
                 hermes_policy.excluded_skill_names if hermes_policy is not None else frozenset()
             ),
@@ -246,7 +253,12 @@ class FileTreeSkillsAdapter(SkillsHarnessAdapter):
         selected: list[_ResolvedRoot] = []
         seen: set[Path] = set()
         for root in roots:
-            path = root.path.resolve(strict=False)
+            try:
+                path = root.path.resolve(strict=False)
+            except (OSError, RuntimeError, ValueError):
+                if root.kind != "configured-root":
+                    raise
+                continue
             if path in seen:
                 continue
             seen.add(path)
@@ -286,6 +298,16 @@ def _iter_skill_roots(root: _ResolvedRoot):
             yield skill_root, f"{category_dir.name}/{skill_root.name}"
 
 
+def _safe_iter_skill_roots(root: _ResolvedRoot):
+    if root.kind != "configured-root":
+        yield from _iter_skill_roots(root)
+        return
+    try:
+        yield from _iter_skill_roots(root)
+    except (OSError, RuntimeError, ValueError, UnicodeError):
+        return
+
+
 def build_skills_adapters(kernel: HarnessKernelService) -> tuple[FileTreeSkillsAdapter, ...]:
     adapters: list[FileTreeSkillsAdapter] = []
     for binding in kernel.bindings_for_family("skills"):
@@ -294,25 +316,19 @@ def build_skills_adapters(kernel: HarnessKernelService) -> tuple[FileTreeSkillsA
         if not isinstance(profile, FileTreeBindingProfile):
             continue
         managed_root = profile.resolve_managed_root(kernel.context)
-        resolved_roots = (
-            _ResolvedRoot(
-                kind="managed-root",
-                scope="canonical",
-                label="Managed skills root",
-                path=managed_root,
-                layout=profile.layout,
-            ),
-            *tuple(
-                _ResolvedRoot(
-                    kind=root.kind,
-                    scope=root.scope,
-                    label=root.label,
-                    path=root.path_resolver(kernel.context),
-                    layout=profile.layout,
-                )
-                for root in profile.discovery_roots
-            ),
-        )
+
+        def resolve_roots(
+            profile=profile,
+            context=kernel.context,
+            managed_root=managed_root,
+        ) -> tuple[_ResolvedRoot, ...]:
+            return _resolve_file_tree_roots(
+                profile=profile,
+                context=context,
+                managed_root=managed_root,
+            )
+
+        resolved_roots = resolve_roots()
         adapters.append(
             FileTreeSkillsAdapter(
                 harness=definition.harness,
@@ -323,6 +339,9 @@ def build_skills_adapters(kernel: HarnessKernelService) -> tuple[FileTreeSkillsA
                 platform=kernel.context.platform,
                 managed_root=managed_root,
                 discovery_roots=resolved_roots,
+                discovery_roots_resolver=(
+                    resolve_roots if profile.discovery_root_resolvers else None
+                ),
                 availability=profile.availability,
                 app_probe_paths=tuple(
                     resolver(kernel.context) for resolver in profile.app_probe_paths
@@ -332,6 +351,33 @@ def build_skills_adapters(kernel: HarnessKernelService) -> tuple[FileTreeSkillsA
             )
         )
     return tuple(adapters)
+
+
+def _resolve_file_tree_roots(
+    *,
+    profile: FileTreeBindingProfile,
+    context: ResolutionContext,
+    managed_root: Path,
+) -> tuple[_ResolvedRoot, ...]:
+    return (
+        _ResolvedRoot(
+            kind="managed-root",
+            scope="canonical",
+            label="Managed skills root",
+            path=managed_root,
+            layout=profile.layout,
+        ),
+        *tuple(
+            _ResolvedRoot(
+                kind=root.kind,
+                scope=root.scope,
+                label=root.label,
+                path=root.path_resolver(context),
+                layout=profile.layout,
+            )
+            for root in profile.resolve_discovery_roots(context)
+        ),
+    )
 
 
 def scan_all_adapters(adapters: tuple[SkillsHarnessAdapter, ...]) -> tuple[SkillsHarnessScan, ...]:
@@ -353,7 +399,7 @@ def _scan_skill_roots(
     observations: list[SkillObservation] = []
     skipped_skill_names: set[str] = set()
     for root in roots:
-        for skill_root, locator_name in _iter_skill_roots(root):
+        for skill_root, locator_name in _safe_iter_skill_roots(root):
             hermes_source = _hermes_external_source(
                 hermes_policy,
                 package_name=None,
@@ -387,6 +433,10 @@ def _scan_skill_roots(
                 package = parse_skill_package(skill_root, default_source=default_source)
             except SkillParseError:
                 continue
+            except (OSError, RuntimeError, ValueError, UnicodeError):
+                if root.kind != "configured-root":
+                    raise
+                continue
 
             if hermes_policy is not None:
                 if not is_skill_manager_binding and _is_excluded_skill(
@@ -413,6 +463,10 @@ def _scan_skill_roots(
                     try:
                         package = parse_skill_package(skill_root, default_source=hermes_source)
                     except SkillParseError:
+                        continue
+                    except (OSError, RuntimeError, ValueError, UnicodeError):
+                        if root.kind != "configured-root":
+                            raise
                         continue
 
             observations.append(

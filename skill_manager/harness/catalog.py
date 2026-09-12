@@ -5,6 +5,7 @@ import re
 from typing import Mapping
 
 from skill_manager.user_environment import live_user_environment_value
+from skill_manager.opencode import opencode_skill_paths
 
 from .contracts import (
     CommandFileBindingProfile,
@@ -74,6 +75,18 @@ def _hermes_skills_root(context) -> Path:
 
 def _hermes_config_path(context) -> Path:
     return _hermes_home(context) / "config.yaml"
+
+
+def _opencode_configured_skill_roots(context) -> tuple[FileTreeDiscoveryRoot, ...]:
+    return tuple(
+        FileTreeDiscoveryRoot(
+            kind="configured-root",
+            scope="configured",
+            label="OpenCode configured skills root",
+            path_resolver=lambda _context, path=path: path,
+        )
+        for path in opencode_skill_paths(context)
+    )
 
 
 def supported_harness_definitions() -> tuple[HarnessDefinition, ...]:
@@ -227,6 +240,7 @@ SUPPORTED_HARNESS_DEFINITIONS: tuple[HarnessDefinition, ...] = (
                         path_resolver=lambda context: context.home / ".agents" / "skills",
                     ),
                 ),
+                discovery_root_resolvers=(_opencode_configured_skill_roots,),
             ),
             "mcp": ConfigSubtreeBindingProfile(
                 config_path_resolver=lambda context: context.home / ".opencode" / "opencode.jsonc",

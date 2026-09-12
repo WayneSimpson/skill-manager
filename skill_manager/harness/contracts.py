@@ -18,6 +18,7 @@ PathResolver = Callable[[ResolutionContext], Path]
 SubtreePath: TypeAlias = tuple[str, ...]
 SubtreePathResolver = Callable[[ResolutionContext], SubtreePath]
 ConfigEntryExclusion = Callable[[str, Mapping[str, object], ResolutionContext], bool]
+DiscoveryRootResolver = Callable[[ResolutionContext], tuple["FileTreeDiscoveryRoot", ...]]
 
 
 @dataclass(frozen=True)
@@ -38,6 +39,7 @@ class FileTreeBindingProfile:
     app_probe_paths: tuple[PathResolver, ...] = ()
     layout: FileTreeLayout = "flat"
     default_category: str | None = None
+    discovery_root_resolvers: tuple[DiscoveryRootResolver, ...] = ()
 
     def resolve_managed_root(self, context: ResolutionContext) -> Path:
         if self.managed_default is None:
@@ -47,6 +49,12 @@ class FileTreeBindingProfile:
             if override:
                 return Path(override)
         return self.managed_default(context)
+
+    def resolve_discovery_roots(self, context: ResolutionContext) -> tuple[FileTreeDiscoveryRoot, ...]:
+        roots = list(self.discovery_roots)
+        for resolver in self.discovery_root_resolvers:
+            roots.extend(resolver(context))
+        return tuple(roots)
 
 
 @dataclass(frozen=True)
@@ -166,6 +174,7 @@ __all__ = [
     "CommandFileBindingProfile",
     "CommandFileRenderFormat",
     "ConfigSubtreeBindingProfile",
+    "DiscoveryRootResolver",
     "FamilyKey",
     "FileTreeAvailability",
     "FileTreeLayout",

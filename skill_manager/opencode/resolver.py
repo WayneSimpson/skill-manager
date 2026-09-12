@@ -80,6 +80,28 @@ def resolve_opencode_config(context: ResolutionContext) -> OpenCodeConfigResolut
     )
 
 
+def opencode_skill_paths(context: ResolutionContext) -> tuple[Path, ...]:
+    """Return readable absolute global skill roots from the static config."""
+    skills = resolve_opencode_config(context).config.get("skills")
+    if not isinstance(skills, dict):
+        return ()
+    configured_paths = skills.get("paths")
+    if not isinstance(configured_paths, list):
+        return ()
+
+    paths: list[Path] = []
+    for value in configured_paths:
+        if not isinstance(value, str) or not value:
+            continue
+        try:
+            path = Path(value)
+            if path.is_absolute() and path.is_dir():
+                paths.append(path)
+        except (OSError, RuntimeError, ValueError):
+            continue
+    return tuple(paths)
+
+
 def _read_source(
     *,
     name: str,
@@ -178,5 +200,6 @@ __all__ = [
     "OpenCodeConfigSource",
     "STATIC_ONLY_LIMITATION",
     "opencode_config_paths",
+    "opencode_skill_paths",
     "resolve_opencode_config",
 ]
