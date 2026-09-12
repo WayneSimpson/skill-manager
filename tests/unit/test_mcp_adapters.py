@@ -562,6 +562,19 @@ profiles:
             with self.assertRaises(MutationError):
                 adapter.enable_server(_spec())
 
+    def test_unterminated_jsonc_comment_raises_mutation_error(self) -> None:
+        with TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            adapter = _adapter("opencode", home=home)
+            adapter.config_path.parent.mkdir(parents=True, exist_ok=True)
+            adapter.config_path.write_text('{} /* broken', encoding="utf-8")
+
+            with self.assertRaises(MutationError) as captured:
+                adapter.enable_server(_spec())
+
+        self.assertEqual(captured.exception.status, 409)
+        self.assertIn("not valid JSONC", str(captured.exception))
+
     def test_scan_reports_malformed_config_without_raising(self) -> None:
         with TemporaryDirectory() as tmp:
             home = Path(tmp)

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import re
 from io import StringIO
 import shutil
 import tomllib
@@ -16,6 +15,7 @@ from ruamel.yaml.error import YAMLError
 
 from skill_manager.errors import MutationError
 from skill_manager.atomic_files import atomic_write_text, file_lock
+from skill_manager.jsonc import strip_jsonc
 from skill_manager.harness import (
     ConfigSubtreeBindingProfile,
     HarnessDefinition,
@@ -301,7 +301,7 @@ class FileBackedMcpAdapter(McpHarnessAdapter):
         text = config_path.read_text(encoding="utf-8")
         if self._file_format in {"json", "jsonc"}:
             try:
-                payload = json.loads(_strip_jsonc(text) if self._file_format == "jsonc" else text)
+                payload = json.loads(strip_jsonc(text) if self._file_format == "jsonc" else text)
             except json.JSONDecodeError as error:
                 raise MutationError(
                     f"{self.harness} config file is not valid {self._file_format.upper()}: {error}",
@@ -429,12 +429,6 @@ def _is_semantic_default(key: str, value: object) -> bool:
     if key in {"headers", "env", "environment", "http_headers"} and value == {}:
         return True
     return False
-
-
-def _strip_jsonc(text: str) -> str:
-    without_block = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
-    without_line = re.sub(r"(^|[^:])//.*$", r"\1", without_block, flags=re.MULTILINE)
-    return re.sub(r",(\s*[}\]])", r"\1", without_line)
 
 
 def _drift_detail(expected: object, actual: object) -> str:
