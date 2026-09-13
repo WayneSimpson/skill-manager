@@ -53,6 +53,11 @@ from .mcp import (
     ReconcileMcpServerRequest,
     SetMcpServerHarnessesRequest,
 )
+from .opencode_runtime_skills import (
+    OpenCodeRuntimeSkillsRefreshRequest,
+    OpenCodeRuntimeSkillsStatusResponse,
+    RuntimeSkillsStatus,
+)
 from .skills import (
     BulkManageFailureResponse,
     BulkManageResultResponse,
@@ -152,7 +157,10 @@ __all__ = [
     "McpUnmanagedByServerResponse",
     "McpUnmanagedHarnessResponse",
     "OkResponse",
+    "OpenCodeRuntimeSkillsRefreshRequest",
+    "OpenCodeRuntimeSkillsStatusResponse",
     "ReconcileMcpServerRequest",
+    "RuntimeSkillsStatus",
     "SetHarnessSupportRequest",
     "SettingsHarnessResponse",
     "SettingsResponse",

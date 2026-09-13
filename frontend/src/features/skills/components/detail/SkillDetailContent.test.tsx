@@ -89,6 +89,7 @@ describe("SkillDetailContent", () => {
           actions: {
             ...unmanagedDetail.actions,
             canManage: false,
+            canManageReason: "Runtime skill has no readable SKILL.md or embedded content and cannot be copied.",
             updateStatus: "no_update_available",
           },
           locations: [
@@ -125,6 +126,7 @@ describe("SkillDetailContent", () => {
     expect(screen.queryByRole("button", { name: "Add to Skill Manager" })).not.toBeInTheDocument();
     expect(screen.getByLabelText("Skill actions")).toBeInTheDocument();
     expect(screen.getByText("No Update Available")).toBeInTheDocument();
+    expect(screen.getByText(/Capability limitation: Runtime skill has no readable SKILL\.md/i)).toBeInTheDocument();
     expect(screen.queryByText("Managed")).not.toBeInTheDocument();
   });
 

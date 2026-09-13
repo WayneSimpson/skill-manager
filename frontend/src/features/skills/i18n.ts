@@ -183,6 +183,7 @@ const englishSkillsCopy = {
     noDescription: "No description provided.",
     loadingDocument: "Loading document",
     noDocument: "No SKILL.md document is available for this entry.",
+    capabilityLimitation: (reason: string) => `Capability limitation: ${reason}`,
     harnesses: "Harnesses",
     locations: "Locations",
     storeNote:
@@ -387,6 +388,7 @@ export const skillsCopy = {
       noDescription: "没有提供描述。",
       loadingDocument: "正在加载文档",
       noDocument: "此条目没有可用的 SKILL.md 文档。",
+      capabilityLimitation: (reason: string) => `能力限制：${reason}`,
       harnesses: "Harness",
       locations: "位置",
       storeNote: "Skill Manager Store 是规范的实体包。启用时，工具位置会以符号链接指向它。",

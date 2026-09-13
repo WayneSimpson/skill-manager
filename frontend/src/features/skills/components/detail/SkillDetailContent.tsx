@@ -94,6 +94,11 @@ export function SkillDetailContent({
           {detail.attentionMessage ? (
             <DetailNote>{detail.attentionMessage}</DetailNote>
           ) : null}
+          {detail.actions.canManageReason ? (
+            <DetailNote>
+              {copy.detail.capabilityLimitation(detail.actions.canManageReason)}
+            </DetailNote>
+          ) : null}
         </DetailSection>
 
         <DetailDisclosure

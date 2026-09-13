@@ -5,7 +5,12 @@ import { mcpManagementKeys } from "../../mcp/public";
 import { skillsKeys } from "../../skills/public";
 import { okJson } from "../../../test/fetch";
 import { renderWithAppProviders } from "../../../test/render";
-import { settingsKeys, useHarnessSupportMutation } from "./queries";
+import {
+  settingsKeys,
+  useDisconnectOpenCodeRuntimeSkillsMutation,
+  useHarnessSupportMutation,
+  useRefreshOpenCodeRuntimeSkillsMutation,
+} from "./queries";
 
 const fetchMock = vi.fn();
 
@@ -19,6 +24,31 @@ function HarnessSupportProbe() {
     >
       Disable Codex support
     </button>
+  );
+}
+
+function RuntimeSkillsMutationProbe() {
+  const refreshMutation = useRefreshOpenCodeRuntimeSkillsMutation();
+  const disconnectMutation = useDisconnectOpenCodeRuntimeSkillsMutation();
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() =>
+          refreshMutation.mutate({
+            consent: true,
+            serverUrl: "http://127.0.0.1:4096",
+            directory: "/tmp/opencode",
+          })
+        }
+      >
+        Refresh runtime skills
+      </button>
+      <button type="button" onClick={() => disconnectMutation.mutate()}>
+        Clear runtime snapshot
+      </button>
+    </>
   );
 }
 
@@ -76,5 +106,39 @@ describe("settings queries", () => {
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: skillsKeys.list() });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: skillsKeys.detailPrefix() });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: skillsKeys.sourceStatusPrefix() });
+  });
+
+  it("invalidates skills after refreshing or disconnecting runtime skills", async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      expect(init?.method).toBe("POST");
+      if (url === "/api/opencode/runtime-skills/refresh") {
+        return okJson({
+          status: "ready",
+          serverUrl: "http://127.0.0.1:4096",
+          directory: "/tmp/opencode",
+          skillCount: 1,
+          error: null,
+        });
+      }
+      if (url === "/api/opencode/runtime-skills/disconnect") {
+        return okJson({
+          status: "disconnected",
+          serverUrl: null,
+          directory: null,
+          skillCount: 0,
+          error: null,
+        });
+      }
+      throw new Error(`Unhandled URL ${url}`);
+    });
+
+    const { queryClient } = renderWithAppProviders(<RuntimeSkillsMutationProbe />);
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh runtime skills" }));
+    await waitFor(() => expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: skillsKeys.list() }));
+    fireEvent.click(screen.getByRole("button", { name: "Clear runtime snapshot" }));
+    await waitFor(() => expect(invalidateSpy).toHaveBeenCalledTimes(6));
   });
 });

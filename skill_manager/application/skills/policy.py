@@ -32,7 +32,7 @@ def attention_message(entry: InventoryEntry) -> str | None:
 
 
 def can_manage(entry: InventoryEntry) -> bool:
-    return entry.kind == "unmanaged"
+    return entry.kind == "unmanaged" and entry.can_manage_reason is None
 
 
 def can_update(entry: InventoryEntry) -> bool:

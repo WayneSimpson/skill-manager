@@ -3,6 +3,7 @@ import { Archive, Database } from "lucide-react";
 import { ErrorBanner } from "../../../components/ErrorBanner";
 import { LoadingSpinner } from "../../../components/LoadingSpinner";
 import { PageHeader } from "../../../components/PageHeader";
+import { OpenCodeRuntimeSkillsPanel } from "../components/OpenCodeRuntimeSkillsPanel";
 import { SettingsHarnessCard } from "../components/SettingsHarnessCard";
 import { useSettingsCopy } from "../i18n";
 import { useSettingsPageController } from "../model/use-settings-page-controller";
@@ -72,6 +73,8 @@ export default function SettingsPage() {
               />
             ))}
           </section>
+
+          <OpenCodeRuntimeSkillsPanel />
         </>
       )}
     </>

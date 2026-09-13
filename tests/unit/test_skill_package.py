@@ -40,6 +40,13 @@ class SkillParsingTests(unittest.TestCase):
         )
         self.assertEqual(manifest.description, 'Use the "fast" path for browser automation.')
 
+    def test_parse_skill_manifest_text_unescapes_json_quoted_scalars(self) -> None:
+        manifest = parse_skill_manifest_text(
+            '---\nname: "Escaped \\\"Name\\\""\ndescription: "A \\\"quoted\\\" description"\n---\n\n# Escaped Name\n'
+        )
+        self.assertEqual(manifest.declared_name, 'Escaped "Name"')
+        self.assertEqual(manifest.description, 'A "quoted" description')
+
     def test_parse_skill_manifest_text_preserves_mismatched_quotes(self) -> None:
         manifest = parse_skill_manifest_text(
             "---\nname: Odd Quotes\ndescription: \"Leading quote only\n---\n\n# Odd Quotes\n"

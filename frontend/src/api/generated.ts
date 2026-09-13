@@ -363,6 +363,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/opencode/runtime-skills/disconnect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Disconnect Runtime Skills */
+        post: operations["disconnect_runtime_skills_api_opencode_runtime_skills_disconnect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/opencode/runtime-skills/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Refresh Runtime Skills */
+        post: operations["refresh_runtime_skills_api_opencode_runtime_skills_refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/opencode/runtime-skills/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Runtime Skills Status */
+        get: operations["runtime_skills_status_api_opencode_runtime_skills_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/scan/availability": {
         parameters: {
             query?: never;
@@ -1667,6 +1718,39 @@ export interface components {
             /** Ok */
             ok: boolean;
         };
+        /** OpenCodeRuntimeSkillsRefreshRequest */
+        OpenCodeRuntimeSkillsRefreshRequest: {
+            /**
+             * Consent
+             * @description Explicit permission to contact the selected local OpenCode server
+             * @constant
+             */
+            consent: true;
+            /** Directory */
+            directory: string;
+            /** Password */
+            password?: string | null;
+            /** Serverurl */
+            serverUrl: string;
+            /** Username */
+            username?: string | null;
+        };
+        /** OpenCodeRuntimeSkillsStatusResponse */
+        OpenCodeRuntimeSkillsStatusResponse: {
+            /** Directory */
+            directory: string | null;
+            /** Error */
+            error: string | null;
+            /** Serverurl */
+            serverUrl: string | null;
+            /** Skillcount */
+            skillCount: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "disconnected" | "ready" | "error";
+        };
         /** ReconcileMcpServerRequest */
         ReconcileMcpServerRequest: {
             /** Harnesses */
@@ -2011,6 +2095,8 @@ export interface components {
             canDelete: boolean;
             /** Canmanage */
             canManage: boolean;
+            /** Canmanagereason */
+            canManageReason?: string | null;
             /** Deleteharnesslabels */
             deleteHarnessLabels: string[];
             /** Stopmanagingharnesslabels */
@@ -2072,6 +2158,8 @@ export interface components {
             canDelete: boolean;
             /** Canmanage */
             canManage: boolean;
+            /** Canmanagereason */
+            canManageReason?: string | null;
             /** Canstopmanaging */
             canStopManaging: boolean;
         };
@@ -3035,6 +3123,79 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["McpUnmanagedByServerResponse"];
+                };
+            };
+        };
+    };
+    disconnect_runtime_skills_api_opencode_runtime_skills_disconnect_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpenCodeRuntimeSkillsStatusResponse"];
+                };
+            };
+        };
+    };
+    refresh_runtime_skills_api_opencode_runtime_skills_refresh_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpenCodeRuntimeSkillsRefreshRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpenCodeRuntimeSkillsStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    runtime_skills_status_api_opencode_runtime_skills_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpenCodeRuntimeSkillsStatusResponse"];
                 };
             };
         };

@@ -79,6 +79,7 @@ class SkillRowActionsResponse(BaseModel):
     canManage: bool
     canStopManaging: bool
     canDelete: bool
+    canManageReason: str | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class HarnessCellResponse(BaseModel):
@@ -110,6 +111,7 @@ class SkillDetailActionsResponse(BaseModel):
     stopManagingHarnessLabels: list[str]
     canDelete: bool
     deleteHarnessLabels: list[str]
+    canManageReason: str | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class SkillLocationResponse(BaseModel):

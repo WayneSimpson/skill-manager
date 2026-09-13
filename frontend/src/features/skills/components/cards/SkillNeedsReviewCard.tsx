@@ -1,6 +1,7 @@
 import { NeedsReviewRow } from "../../../../components/cards/NeedsReviewRow";
 import { UiTooltip } from "../../../../components/ui/UiTooltip";
 import { getHarnessPresentation } from "../../../../components/harness/harnessPresentation";
+import { useSkillsCopy } from "../../i18n";
 import type { StructuralSkillAction } from "../../model/pending";
 import type { HarnessCell, SkillListRow } from "../../model/types";
 
@@ -36,6 +37,7 @@ export function SkillNeedsReviewCard({
   onOpenSkill,
   onManageSkill,
 }: SkillNeedsReviewCardProps) {
+  const copy = useSkillsCopy();
   const found = row.cells.filter((cell) => cell.state === "found");
   const managing = pendingStructuralAction === "manage";
   const metaText = `Found in ${found.length} harness${found.length === 1 ? "" : "es"}`;
@@ -56,7 +58,12 @@ export function SkillNeedsReviewCard({
       actionTitle={
         row.actions.canManage
           ? "Add this skill to Skill Manager"
-          : "This skill cannot be adopted automatically"
+          : row.actions.canManageReason ?? "This skill cannot be adopted automatically"
+      }
+      actionUnavailableReason={
+        row.actions.canManageReason
+          ? copy.detail.capabilityLimitation(row.actions.canManageReason)
+          : undefined
       }
       pending={managing}
       actionDisabled={bulkActionPending || pendingStructuralAction !== null || !row.actions.canManage}

@@ -14,10 +14,11 @@ source diagnostics and do not prevent other valid files from being read.
 
 This is a static compatibility policy, not a complete implementation of
 OpenCode's upstream configuration resolution. It does not invoke OpenCode,
-retrieve live runtime state, or include plugin-added paths. A later task should
-add live retrieval only when the caller needs the effective runtime
-configuration. The resolver does not change the existing MCP mutation paths;
-in particular, the XDG `.jsonc` path is not added to MCP write discovery here.
+retrieve live runtime state, or include plugin-added paths during ordinary
+scans. Explicit runtime retrieval is documented separately in
+`docs/opencode-runtime-skills.md`. The resolver does not change the existing
+MCP mutation paths; in particular, the XDG `.jsonc` path is not added to MCP
+write discovery here.
 
 ## Task 02 skill discovery
 

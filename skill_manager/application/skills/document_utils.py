@@ -11,7 +11,10 @@ def read_skill_document_markdown(package_root: Path | None) -> str | None:
     if not skill_path.is_file():
         return None
 
-    document = skill_path.read_text(encoding="utf-8").strip()
+    try:
+        document = skill_path.read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeError):
+        return None
     if not document:
         return None
     return strip_frontmatter(document)

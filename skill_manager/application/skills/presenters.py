@@ -42,6 +42,7 @@ def skill_detail_payload(
             "stopManagingHarnessLabels": linked_harness_labels(entry, columns),
             "canDelete": can_delete(entry),
             "deleteHarnessLabels": linked_harness_labels(entry, columns),
+            **_manage_reason_payload(entry),
         },
         "harnessCells": [cell_payload(entry, column) for column in columns],
         "locations": [sighting_payload(sighting) for sighting in entry.detail_sightings()],
@@ -73,6 +74,7 @@ def row_payload(entry: InventoryEntry, columns: tuple[InventoryColumn, ...]) -> 
             "canManage": can_manage(entry),
             "canStopManaging": stop_managing_status(entry) == "available",
             "canDelete": can_delete(entry),
+            **_manage_reason_payload(entry),
         },
         "cells": [cell_payload(entry, column) for column in columns],
     }
@@ -119,3 +121,9 @@ def stop_managing_status_payload(entry: InventoryEntry) -> str | None:
     from .policy import stop_managing_status
 
     return stop_managing_status(entry)
+
+
+def _manage_reason_payload(entry: InventoryEntry) -> dict[str, str]:
+    if entry.can_manage_reason is None:
+        return {}
+    return {"canManageReason": entry.can_manage_reason}

@@ -438,6 +438,23 @@ class SkillsAdapterTests(unittest.TestCase):
             self.assertTrue(is_directory_link(harness_pkg))
             self.assertEqual(harness_pkg.resolve(), store_pkg.resolve())
 
+    def test_adopt_local_copy_refuses_symlink_to_different_managed_package(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            spec = create_fake_home_spec(Path(temp_dir))
+            existing_target = seed_skill_package(spec.skills_store_root, "existing", "Existing")
+            replacement_target = seed_skill_package(spec.skills_store_root, "replacement", "Replacement")
+            harness_pkg = spec.codex_root / "existing"
+            create_directory_link(harness_pkg, existing_target)
+            codex = _adapter("codex", spec)
+
+            with self.assertRaises(MutationError) as ctx:
+                codex.adopt_local_copy(harness_pkg, replacement_target)
+
+            self.assertIn("not", str(ctx.exception))
+            self.assertTrue(is_directory_link(harness_pkg))
+            self.assertEqual(harness_pkg.resolve(), existing_target.resolve())
+            self.assertTrue((replacement_target / "SKILL.md").is_file())
+
     def test_materialize_binding_restores_real_directory(self) -> None:
         with TemporaryDirectory() as temp_dir:
             spec = create_fake_home_spec(Path(temp_dir))

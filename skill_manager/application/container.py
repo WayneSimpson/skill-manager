@@ -39,6 +39,12 @@ from .skills.marketplace import (
     MarketplaceQueryService,
 )
 from .skills.read_models import SkillsReadModelService
+from .skills.runtime import (
+    OpenCodeRuntimeSkillsClient,
+    RuntimeSkillClient,
+    RuntimeSkillSnapshotStore,
+    RuntimeSkillsService,
+)
 from .skills.source_fetch import SourceFetchService
 from .skills.store import SkillStore
 from .marketplace_cache import MarketplaceCache
@@ -57,6 +63,7 @@ class BackendContainer:
     skills_read_models: SkillsReadModelService
     skills_queries: SkillsQueryService
     skills_mutations: SkillsMutationService
+    opencode_runtime_skills: RuntimeSkillsService
     settings_queries: SettingsQueryService
     settings_mutations: SettingsMutationService
     slash_command_store: SlashCommandStore
@@ -87,6 +94,7 @@ def build_backend_container(
     cli_marketplace_catalog: CliMarketplaceCatalog | None = None,
     source_fetcher: SourceFetchService | None = None,
     mcp_availability_probe: McpAvailabilityProbe | None = None,
+    runtime_skill_client: RuntimeSkillClient | None = None,
 ) -> BackendContainer:
     active_env = dict(os.environ)
     if env is not None:
@@ -98,7 +106,15 @@ def build_backend_container(
     invalidation = InvalidationFanout()
 
     skills_store = SkillStore(paths.skills_store_root, manifest_path=paths.skills_store_manifest)
-    skills_read_models = SkillsReadModelService.from_kernel(store=skills_store, kernel=harness_kernel)
+    runtime_skills = RuntimeSkillsService(
+        store=RuntimeSkillSnapshotStore(),
+        client=runtime_skill_client or OpenCodeRuntimeSkillsClient(),
+    )
+    skills_read_models = SkillsReadModelService.from_kernel(
+        store=skills_store,
+        kernel=harness_kernel,
+        runtime_snapshot=runtime_skills.store,
+    )
     invalidation.register(skills_read_models)
 
     active_source_fetcher = source_fetcher or SourceFetchService()
@@ -199,6 +215,7 @@ def build_backend_container(
         skills_read_models=skills_read_models,
         skills_queries=skills_queries,
         skills_mutations=skills_mutations,
+        opencode_runtime_skills=runtime_skills,
         settings_queries=settings_queries,
         settings_mutations=settings_mutations,
         slash_command_store=slash_command_store,

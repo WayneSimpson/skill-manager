@@ -110,4 +110,5 @@ class MarketplaceQueryService:
         return SkillInventory.from_snapshot(
             store_scan=snapshot.store_scan,
             harness_scans=self.read_models.visible_scans(snapshot),
+            runtime_skills=snapshot.runtime_skills,
         )

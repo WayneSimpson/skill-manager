@@ -46,7 +46,7 @@ class SkillsQueryService:
         return skill_detail_payload(
             entry,
             columns=inventory.columns,
-            document_markdown=read_skill_document_markdown(package_root),
+            document_markdown=read_skill_document_markdown(package_root) or entry.document_markdown,
             source_links=self.build_source_links(entry),
         )
 
@@ -61,6 +61,7 @@ class SkillsQueryService:
         return SkillInventory.from_snapshot(
             store_scan=snapshot.store_scan,
             harness_scans=self.read_models.visible_scans(snapshot),
+            runtime_skills=snapshot.runtime_skills,
         )
 
     def require_entry(self, skill_ref: str) -> InventoryEntry:
@@ -85,11 +86,11 @@ class SkillsQueryService:
             return fetched_revision != entry.current_revision
 
     def resolve_detail_package_root(self, entry: InventoryEntry) -> Path | None:
-        if entry.package_path is not None and (entry.package_path / "SKILL.md").is_file():
+        if entry.package_path is not None and _has_skill_document(entry.package_path):
             return entry.package_path
 
         for sighting in entry.detail_sightings():
-            if sighting.path is not None and (sighting.path / "SKILL.md").is_file():
+            if sighting.path is not None and _has_skill_document(sighting.path):
                 return sighting.path
         return None
 
@@ -145,3 +146,10 @@ class SkillsQueryService:
         if entry is None:
             return None
         return self.resolve_detail_package_root(entry)
+
+
+def _has_skill_document(package_root: Path) -> bool:
+    try:
+        return (package_root / "SKILL.md").is_file()
+    except (OSError, RuntimeError, ValueError):
+        return False

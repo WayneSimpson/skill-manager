@@ -15,6 +15,8 @@ interface NeedsReviewRowProps {
   statusChip?: ReactNode;
   /** Optional long-form copy. Line-clamped to 2 lines. */
   description?: string;
+  /** Optional explanation for why the primary action is unavailable. */
+  actionUnavailableReason?: string;
   actionLabel: string;
   /** Shared tooltip copy for the action button. */
   actionTitle?: string;
@@ -31,6 +33,7 @@ export function NeedsReviewRow({
   metaText,
   statusChip,
   description,
+  actionUnavailableReason,
   actionLabel,
   actionTitle,
   pending = false,
@@ -96,6 +99,9 @@ export function NeedsReviewRow({
           <OverflowTooltipText as="p" className="needs-review-row__description">
             {description}
           </OverflowTooltipText>
+        ) : null}
+        {actionUnavailableReason ? (
+          <p className="needs-review-row__limitation">{actionUnavailableReason}</p>
         ) : null}
       </div>
 

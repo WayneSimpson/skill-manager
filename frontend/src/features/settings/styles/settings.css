@@ -69,4 +69,196 @@
   color: var(--color-text);
 }
 
+.settings-runtime {
+  gap: var(--space-4);
+}
+
+.settings-runtime__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-5);
+}
+
+.settings-runtime__subtitle {
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
+.settings-runtime__status {
+  display: grid;
+  flex: 0 0 auto;
+  gap: var(--space-1);
+  justify-items: end;
+  text-align: right;
+}
+
+.settings-runtime__status-label {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.settings-runtime__status-value {
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  font-weight: 650;
+}
+
+.settings-runtime__status-value[data-status="ready"] {
+  color: var(--color-success);
+}
+
+.settings-runtime__status-value[data-status="error"] {
+  color: var(--color-danger);
+}
+
+.settings-runtime__snapshot {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-5);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+}
+
+.settings-runtime__snapshot-copy {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.settings-runtime__snapshot-copy strong {
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+}
+
+.settings-runtime__snapshot-copy p {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+}
+
+.settings-runtime__connection {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.settings-runtime__form {
+  display: grid;
+  gap: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+.settings-runtime__form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.settings-runtime__field {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+}
+
+.settings-runtime__field input {
+  width: 100%;
+  min-width: 0;
+  height: 38px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-sunken);
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+}
+
+.settings-runtime__field input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-softer);
+}
+
+.settings-runtime__field small {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+.settings-runtime__consent {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+}
+
+.settings-runtime__consent input {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  accent-color: var(--color-accent);
+}
+
+.settings-runtime__warning {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-3);
+  border-left: 2px solid var(--color-warning);
+  background: var(--color-surface-raised);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+}
+
+.settings-runtime__warning svg {
+  flex: 0 0 auto;
+  color: var(--color-warning);
+}
+
+.settings-runtime__validation-error,
+.settings-runtime__error {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+}
+
+.settings-runtime__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+@media (max-width: 680px) {
+  .settings-runtime__heading,
+  .settings-runtime__snapshot {
+    display: grid;
+  }
+
+  .settings-runtime__status {
+    justify-items: start;
+    text-align: left;
+  }
+
+  .settings-runtime__form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 }

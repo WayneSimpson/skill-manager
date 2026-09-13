@@ -34,6 +34,15 @@ describe("SettingsPage", () => {
           harnesses: [],
         });
       }
+      if (url === "/api/opencode/runtime-skills/status") {
+        return okJson({
+          status: "disconnected",
+          serverUrl: null,
+          directory: null,
+          skillCount: 0,
+          error: null,
+        });
+      }
       throw new Error(`Unhandled URL ${url}`);
     });
 

@@ -10,6 +10,7 @@ from skill_manager.harness import HarnessKernelService
 from .adapters import build_skills_adapters, scan_all_adapters
 from .contracts import SkillsHarnessAdapter, SkillsHarnessStatus
 from .observations import SkillStoreScan, SkillsHarnessScan
+from .runtime import RuntimeSkillRecord, RuntimeSkillSnapshotStore
 from .store import SkillStore
 
 
@@ -17,6 +18,7 @@ from .store import SkillStore
 class SkillsReadModelSnapshot:
     store_scan: SkillStoreScan
     harness_scans: tuple[SkillsHarnessScan, ...]
+    runtime_skills: tuple[RuntimeSkillRecord, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -32,11 +34,13 @@ class SkillsReadModelService:
         store: SkillStore,
         adapters: tuple[SkillsHarnessAdapter, ...],
         kernel: HarnessKernelService,
+        runtime_snapshot: RuntimeSkillSnapshotStore | None = None,
         snapshot_ttl_seconds: float = 1.0,
     ) -> None:
         self.store = store
         self.adapters = adapters
         self.kernel = kernel
+        self.runtime_snapshot = runtime_snapshot or RuntimeSkillSnapshotStore()
         self.snapshot_ttl_seconds = snapshot_ttl_seconds
         self._cache: _CachedSnapshot | None = None
         self._lock = Lock()
@@ -47,11 +51,13 @@ class SkillsReadModelService:
         *,
         store: SkillStore,
         kernel: HarnessKernelService,
+        runtime_snapshot: RuntimeSkillSnapshotStore | None = None,
     ) -> "SkillsReadModelService":
         return cls(
             store=store,
             adapters=build_skills_adapters(kernel),
             kernel=kernel,
+            runtime_snapshot=runtime_snapshot,
         )
 
     def find_adapter(self, harness: str) -> SkillsHarnessAdapter | None:
@@ -104,6 +110,7 @@ class SkillsReadModelService:
         snapshot = SkillsReadModelSnapshot(
             store_scan=self.store.scan(),
             harness_scans=scan_all_adapters(self.adapters),
+            runtime_skills=self.runtime_snapshot.records(),
         )
         with self._lock:
             self._cache = _CachedSnapshot(snapshot=snapshot, captured_at=time.time())

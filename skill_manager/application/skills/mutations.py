@@ -6,7 +6,7 @@ from tempfile import TemporaryDirectory
 from skill_manager.errors import MutationError
 
 from .contracts import SkillsHarnessAdapter
-from .identity import SourceDescriptor
+from .identity import SourceDescriptor, stable_id
 from .inventory import InventoryEntry
 from .package import parse_skill_package
 from .policy import (
@@ -19,6 +19,7 @@ from .policy import (
 )
 from .queries import SkillsQueryService
 from .read_models import SkillsReadModelService
+from .runtime import RuntimeSkillRecord, runtime_skill_document
 from .source_fetch import SourceFetchService
 
 
@@ -262,35 +263,97 @@ class SkillsMutationService:
         return {"ok": True}
 
     def _manage_entry(self, entry: InventoryEntry) -> None:
-        harness_sightings = [s for s in entry.sightings if s.kind == "harness" and s.path is not None]
-        if not harness_sightings:
+        harness_sightings = [s for s in entry.sightings if s.kind == "harness"]
+        source_path = (
+            entry.runtime_materialize_path
+            if entry.runtime_only
+            else next((s.path for s in harness_sightings if s.path is not None), None)
+        )
+        if source_path is None and not entry.runtime_content:
             raise MutationError("no local skill copy found to manage", status=400)
-        source = harness_sightings[0].source
+        binding_adapters = self._preflight_bindings(harness_sightings)
+
+        source = entry.source
         if source.is_source_backed:
             source_kind, source_locator = source.kind, source.locator
         else:
             source_kind = "centralized"
             source_locator = f"centralized:{entry.name}"
+
+        if source_path is None:
+            with TemporaryDirectory(prefix="skill-runtime-") as work_dir:
+                source_path = _write_runtime_package(entry, Path(work_dir))
+                ingested = self._ingest_entry(
+                    entry,
+                    source_path=source_path,
+                    source_kind=source_kind,
+                    source_locator=source_locator,
+                    origin_harness=_origin_harness_for_entry(harness_sightings),
+                )
+                self._bind_managed_entry(entry, ingested, harness_sightings, binding_adapters)
+            return
+
+        ingested = self._ingest_entry(
+            entry,
+            source_path=source_path,
+            source_kind=source_kind,
+            source_locator=source_locator,
+            origin_harness=_origin_harness_for_entry(harness_sightings),
+        )
+        self._bind_managed_entry(entry, ingested, harness_sightings, binding_adapters)
+
+    def _preflight_bindings(self, harness_sightings) -> dict[str, SkillsHarnessAdapter]:
+        adapters: dict[str, SkillsHarnessAdapter] = {}
+        for sighting in harness_sightings:
+            if sighting.harness is None or sighting.harness in adapters:
+                continue
+            adapters[sighting.harness] = self.read_models.require_enabled_adapter(sighting.harness)
+        return adapters
+
+    def _ingest_entry(
+        self,
+        entry: InventoryEntry,
+        *,
+        source_path: Path,
+        source_kind: str,
+        source_locator: str,
+        origin_harness: str | None,
+    ) -> Path:
         try:
             ingested = self.read_models.store.ingest(
-                source_path=harness_sightings[0].path,
+                source_path=source_path,
                 declared_name=entry.name,
                 source_kind=source_kind,
                 source_locator=source_locator,
-                origin_harness=_origin_harness_for_entry(harness_sightings),
+                origin_harness=origin_harness,
             )
         except ValueError as error:
             raise MutationError(str(error), status=409) from error
+        return ingested
+
+    def _bind_managed_entry(
+        self,
+        entry: InventoryEntry,
+        ingested: Path,
+        harness_sightings,
+        binding_adapters: dict[str, SkillsHarnessAdapter],
+    ) -> None:
         canonical_bound_harnesses: set[str] = set()
         for sighting in harness_sightings:
-            adapter = self.read_models.require_enabled_adapter(sighting.harness)
+            if sighting.harness is None:
+                continue
+            adapter = binding_adapters[sighting.harness]
             if sighting.scope == "canonical":
+                if sighting.path is None:
+                    continue
                 adapter.adopt_local_copy(existing_dir=sighting.path, package_path=ingested)
                 canonical_bound_harnesses.add(sighting.harness)
         for sighting in harness_sightings:
+            if sighting.harness is None:
+                continue
             if sighting.harness in canonical_bound_harnesses:
                 continue
-            adapter = self.read_models.require_enabled_adapter(sighting.harness)
+            adapter = binding_adapters[sighting.harness]
             adapter.enable_shared_package(ingested)
             canonical_bound_harnesses.add(sighting.harness)
 
@@ -319,3 +382,21 @@ def _origin_harness_for_entry(harness_sightings) -> str | None:
         if sighting.scope == "canonical":
             return sighting.harness
     return harness_sightings[0].harness if harness_sightings else None
+
+
+def _write_runtime_package(entry: InventoryEntry, work_dir: Path) -> Path:
+    package_dir = work_dir / f"runtime-{stable_id(entry.source.kind, entry.source.locator, entry.name)}"
+    package_dir.mkdir()
+    document = runtime_skill_document(
+        RuntimeSkillRecord(
+            name=entry.name,
+            description=entry.description,
+            location=None,
+            content=entry.runtime_content,
+            slash=entry.runtime_slash,
+        )
+    )
+    if document is None:
+        raise MutationError("runtime skill has no embedded content to materialize", status=400)
+    (package_dir / "SKILL.md").write_text(document, encoding="utf-8")
+    return package_dir

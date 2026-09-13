@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import hashlib
+import json
 from pathlib import Path
 
 from .identity import SkillRef, SourceDescriptor
@@ -160,5 +161,13 @@ def _optional_metadata_value(metadata: dict[str, str], key: str) -> str | None:
 def _normalize_metadata_scalar(value: str) -> str:
     normalized = value.strip()
     if len(normalized) >= 2 and normalized[0] == normalized[-1] and normalized[0] in {"'", '"'}:
+        if normalized[0] == '"':
+            try:
+                parsed = json.loads(normalized)
+            except json.JSONDecodeError:
+                pass
+            else:
+                if isinstance(parsed, str):
+                    return parsed.strip()
         return normalized[1:-1].strip()
     return normalized

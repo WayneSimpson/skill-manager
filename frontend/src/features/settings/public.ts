@@ -1,7 +1,11 @@
 export {
   invalidateSettingsQueries,
+  runtimeSkillsKeys,
+  useDisconnectOpenCodeRuntimeSkillsMutation,
   settingsKeys,
   useHarnessSupportMutation,
+  useOpenCodeRuntimeSkillsStatusQuery,
+  useRefreshOpenCodeRuntimeSkillsMutation,
   useSettingsQuery,
 } from "./api/queries";
 

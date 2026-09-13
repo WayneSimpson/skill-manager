@@ -2723,6 +2723,121 @@
         "title": "OkResponse",
         "type": "object"
       },
+      "OpenCodeRuntimeSkillsRefreshRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "consent": {
+            "const": true,
+            "description": "Explicit permission to contact the selected local OpenCode server",
+            "title": "Consent",
+            "type": "boolean"
+          },
+          "directory": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Directory",
+            "type": "string"
+          },
+          "password": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password"
+          },
+          "serverUrl": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Serverurl",
+            "type": "string"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          }
+        },
+        "required": [
+          "consent",
+          "serverUrl",
+          "directory"
+        ],
+        "title": "OpenCodeRuntimeSkillsRefreshRequest",
+        "type": "object"
+      },
+      "OpenCodeRuntimeSkillsStatusResponse": {
+        "properties": {
+          "directory": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Directory"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "serverUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serverurl"
+          },
+          "skillCount": {
+            "title": "Skillcount",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "disconnected",
+              "ready",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "serverUrl",
+          "directory",
+          "skillCount",
+          "error"
+        ],
+        "title": "OpenCodeRuntimeSkillsStatusResponse",
+        "type": "object"
+      },
       "ReconcileMcpServerRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3596,6 +3711,17 @@
             "title": "Canmanage",
             "type": "boolean"
           },
+          "canManageReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canmanagereason"
+          },
           "deleteHarnessLabels": {
             "items": {
               "type": "string"
@@ -3824,6 +3950,17 @@
           "canManage": {
             "title": "Canmanage",
             "type": "boolean"
+          },
+          "canManageReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canmanagereason"
           },
           "canStopManaging": {
             "title": "Canstopmanaging",
@@ -5616,6 +5753,80 @@
           }
         },
         "summary": "List Unmanaged By Server"
+      }
+    },
+    "/api/opencode/runtime-skills/disconnect": {
+      "post": {
+        "operationId": "disconnect_runtime_skills_api_opencode_runtime_skills_disconnect_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenCodeRuntimeSkillsStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Disconnect Runtime Skills"
+      }
+    },
+    "/api/opencode/runtime-skills/refresh": {
+      "post": {
+        "operationId": "refresh_runtime_skills_api_opencode_runtime_skills_refresh_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenCodeRuntimeSkillsRefreshRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenCodeRuntimeSkillsStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Refresh Runtime Skills"
+      }
+    },
+    "/api/opencode/runtime-skills/status": {
+      "get": {
+        "operationId": "runtime_skills_status_api_opencode_runtime_skills_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenCodeRuntimeSkillsStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Runtime Skills Status"
       }
     },
     "/api/scan/availability": {
