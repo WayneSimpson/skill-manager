@@ -16,6 +16,7 @@ from ruamel.yaml.error import YAMLError
 from skill_manager.errors import MutationError
 from skill_manager.atomic_files import atomic_write_text, file_lock
 from skill_manager.jsonc import strip_jsonc
+from skill_manager.opencode.resolver import OpenCodeConfigResolution, resolve_opencode_config
 from skill_manager.harness import (
     ConfigSubtreeBindingProfile,
     HarnessDefinition,
@@ -52,7 +53,7 @@ class FileBackedMcpAdapter(McpHarnessAdapter):
         self.harness = definition.harness
         self.label = definition.label
         self.logo_key = definition.logo_key
-        self.config_path = profile.resolve_config_path(context)
+        self._profile = profile
         self._discovery_config_paths = profile.resolve_discovery_config_paths(context)
         self._install_probe = definition.install_probe
         self._install_probes = definition.install_probes_for(context.platform)
@@ -65,6 +66,10 @@ class FileBackedMcpAdapter(McpHarnessAdapter):
         self._mapper: TransportMapper = get_mapper(profile.codec)
         self._capability_probe = profile.capability_probe
         self._capability_unavailable_reason = profile.capability_unavailable_reason
+
+    @property
+    def config_path(self) -> Path:
+        return self._profile.resolve_config_path(self._context)
 
     def status(self) -> McpHarnessStatus:
         installed = self._is_installed()
@@ -89,10 +94,14 @@ class FileBackedMcpAdapter(McpHarnessAdapter):
         scan_issue: str | None = None
 
         try:
+            resolution = resolve_opencode_config(self._context) if self.harness == "opencode" else None
+            if resolution is not None:
+                scan_issue = "; ".join(resolution.diagnostics) or None
             raw_entries = (
                 self._read_entries(
                     exclude_harness_owned=True,
                     managed_names=frozenset(specs_by_name),
+                    opencode_resolution=resolution,
                 )
                 if status.config_present
                 else ()
@@ -122,6 +131,7 @@ class FileBackedMcpAdapter(McpHarnessAdapter):
                         raw_payload=dict(raw.payload),
                         parsed_spec=parsed_spec,
                         parse_issue=parse_issue,
+                        config_path=raw.config_path,
                     )
                 )
                 continue
@@ -135,6 +145,7 @@ class FileBackedMcpAdapter(McpHarnessAdapter):
                         parsed_spec=parsed_spec,
                         drift_detail=parse_issue,
                         parse_issue=parse_issue,
+                        config_path=raw.config_path,
                     )
                 )
                 continue
@@ -148,6 +159,7 @@ class FileBackedMcpAdapter(McpHarnessAdapter):
                         state="managed",
                         raw_payload=dict(raw.payload),
                         parsed_spec=parsed_spec,
+                        config_path=raw.config_path,
                     )
                 )
             else:
@@ -158,6 +170,7 @@ class FileBackedMcpAdapter(McpHarnessAdapter):
                         raw_payload=dict(raw.payload),
                         parsed_spec=parsed_spec,
                         drift_detail=_drift_detail(expected, actual),
+                        config_path=raw.config_path,
                     )
                 )
 
@@ -190,17 +203,20 @@ class FileBackedMcpAdapter(McpHarnessAdapter):
 
     def enable_server(self, spec: McpServerSpec) -> None:
         self._require_mcp_writable()
-        with file_lock(self._lock_path(self.config_path)):
-            document = self._load_document(self.config_path)
+        self._preflight_opencode_mutation()
+        config_path = self.config_path
+        with file_lock(self._lock_path(config_path)):
+            document = self._load_document(config_path)
             subtree = self._ensure_subtree(document, self._write_subtree_path)
             subtree[spec.name] = self._mapper.spec_to_dict(spec)
             for subtree_path in self._read_subtree_paths:
                 if subtree_path != self._write_subtree_path:
                     self._remove_from_subtree(document, subtree_path, spec.name)
-            atomic_write_text(self.config_path, self._dump_document(document))
-        self._remove_from_noncanonical_config_paths(spec.name)
+            atomic_write_text(config_path, self._dump_document(document))
+        self._remove_from_noncanonical_config_paths(spec.name, config_path)
 
     def disable_server(self, name: str) -> None:
+        self._preflight_opencode_mutation()
         for config_path in self._discovery_config_paths:
             if not config_path.is_file():
                 continue
@@ -213,9 +229,15 @@ class FileBackedMcpAdapter(McpHarnessAdapter):
                     continue
                 atomic_write_text(config_path, self._dump_document(document))
 
-    def _remove_from_noncanonical_config_paths(self, name: str) -> None:
+    def _preflight_opencode_mutation(self) -> None:
+        if self.harness == "opencode":
+            resolution = resolve_opencode_config(self._context)
+            if resolution.diagnostics:
+                raise MutationError("; ".join(resolution.diagnostics), status=409)
+
+    def _remove_from_noncanonical_config_paths(self, name: str, selected_path: Path) -> None:
         for config_path in self._discovery_config_paths:
-            if config_path == self.config_path or not config_path.is_file():
+            if config_path == selected_path or not config_path.is_file():
                 continue
             with file_lock(self._lock_path(config_path)):
                 document = self._load_document(config_path)
@@ -262,7 +284,15 @@ class FileBackedMcpAdapter(McpHarnessAdapter):
         *,
         exclude_harness_owned: bool = False,
         managed_names: frozenset[str] = frozenset(),
+        opencode_resolution: OpenCodeConfigResolution | None = None,
     ) -> tuple[_RawEntry, ...]:
+        if self.harness == "opencode":
+            resolution = opencode_resolution or resolve_opencode_config(self._context)
+            return tuple(
+                _RawEntry(name, value, resolution.entry_sources[("mcp", name)], self._write_subtree_path)
+                for name, value in self._read_subtree(resolution.config, self._write_subtree_path).items()
+                if isinstance(value, dict)
+            )
         entries: list[_RawEntry] = []
         seen_names: set[str] = set()
         for config_path in self._discovery_config_paths:

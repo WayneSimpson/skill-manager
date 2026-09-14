@@ -30,6 +30,7 @@ class McpObservedEntry:
     parsed_spec: McpServerSpec | None = None
     drift_detail: str | None = None
     parse_issue: str | None = None
+    config_path: Path | None = None
 
 
 @dataclass(frozen=True)

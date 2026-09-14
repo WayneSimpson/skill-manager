@@ -106,7 +106,8 @@ class McpMutationService:
     ) -> dict[str, bool]:
         record = self._require_record(name)
         adapter = self.read_models.require_enabled_adapter(harness)
-        if adapter.has_binding(name):
+        # OpenCode enable must also consolidate inherited/duplicate config entries.
+        if harness != "opencode" and adapter.has_binding(name):
             return {"ok": True}
         binding_record = self._record_for_enable(record, config=config)
         result = self.harness_application.enable_one(
@@ -144,7 +145,7 @@ class McpMutationService:
                 binding_record.spec,
                 self.read_models.enabled_harnesses(),
                 writable_only=True,
-                skip_harnesses=bound_now,
+                skip_harnesses=bound_now - {"opencode"},
                 commit=(lambda: self.store.upsert_record(binding_record)) if binding_record != record else None,
             ).to_dict()
         return self.harness_application.disable_many(

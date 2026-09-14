@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
@@ -36,6 +36,8 @@ class OpenCodeConfigResolution:
     diagnostics: tuple[str, ...]
     static_only: bool = True
     limitation: str = STATIC_ONLY_LIMITATION
+    # Highest declaration of a named entry within each top-level section.
+    entry_sources: dict[tuple[str, str], Path] = field(default_factory=dict)
 
 
 def opencode_config_paths(context: ResolutionContext) -> tuple[Path, ...]:
@@ -57,6 +59,7 @@ def resolve_opencode_config(context: ResolutionContext) -> OpenCodeConfigResolut
     merged: dict[str, object] = {}
     sources: list[OpenCodeConfigSource] = []
     diagnostics: list[str] = []
+    entry_sources: dict[tuple[str, str], Path] = {}
 
     for precedence, (path, (name, file_format)) in enumerate(
         zip(opencode_config_paths(context), source_specs)
@@ -71,13 +74,26 @@ def resolve_opencode_config(context: ResolutionContext) -> OpenCodeConfigResolut
         if source.diagnostic is not None:
             diagnostics.append(source.diagnostic)
         if payload is not None:
+            for section, value in payload.items():
+                if isinstance(value, dict):
+                    for name in value:
+                        entry_sources[(section, name)] = path
+                else:
+                    entry_sources = {key: origin for key, origin in entry_sources.items() if key[0] != section}
             merged = _merge_objects(merged, payload)
 
     return OpenCodeConfigResolution(
         config=merged,
         sources=tuple(sources),
         diagnostics=tuple(diagnostics),
+        entry_sources=entry_sources,
     )
+
+
+def opencode_write_config_path(context: ResolutionContext) -> Path:
+    """Keep writes in the highest-precedence existing file, otherwise modern JSONC."""
+    paths = opencode_config_paths(context)
+    return next((path for path in reversed(paths) if path.is_file()), paths[-1])
 
 
 def opencode_skill_paths(context: ResolutionContext) -> tuple[Path, ...]:
@@ -201,5 +217,6 @@ __all__ = [
     "STATIC_ONLY_LIMITATION",
     "opencode_config_paths",
     "opencode_skill_paths",
+    "opencode_write_config_path",
     "resolve_opencode_config",
 ]

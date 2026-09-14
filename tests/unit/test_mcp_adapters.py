@@ -9,6 +9,8 @@ from tempfile import TemporaryDirectory
 from unittest import mock
 
 from skill_manager.application.mcp import FileBackedMcpAdapter
+from skill_manager.application.mcp.config_choice import config_choices_payload
+from skill_manager.application.mcp.identity import build_identity_plan
 from skill_manager.application.mcp.store import McpServerSpec, McpServerStore, McpSource
 from skill_manager.errors import MutationError
 from skill_manager.harness import HarnessKernelService, HarnessSupportStore
@@ -61,6 +63,155 @@ def _adapter(
 
 
 class FileBackedMcpAdapterTests(unittest.TestCase):
+    def test_opencode_discovers_each_supported_config_and_uses_it_for_writes(self) -> None:
+        for relative in ('.opencode/opencode.jsonc', '.config/opencode/opencode.json', '.config/opencode/opencode.jsonc'):
+            with self.subTest(relative=relative), TemporaryDirectory() as tmp:
+                home = Path(tmp)
+                adapter = _adapter('opencode', home=home)
+                path = home / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(json.dumps({'mcp': {
+                    'local': {'type': 'local', 'command': ['node', 'server.js'], 'enabled': True},
+                    'remote': {'type': 'remote', 'url': 'https://example.com/mcp', 'enabled': False},
+                    'local-disabled': {'type': 'local', 'command': ['node'], 'enabled': False},
+                    'remote-enabled': {'type': 'remote', 'url': 'https://example.com/mcp', 'enabled': True},
+                }}))
+                scan = adapter.scan(())
+                self.assertTrue(scan.config_present)
+                self.assertEqual(scan.config_path, path)
+                entries = {e.name: e for e in scan.entries}
+                self.assertEqual(entries['local'].parsed_spec.transport, 'stdio')
+                self.assertEqual(entries['remote'].parsed_spec.transport, 'http')
+                self.assertFalse(entries['remote'].raw_payload['enabled'])
+                self.assertFalse(entries['local-disabled'].raw_payload['enabled'])
+                self.assertEqual(entries['local-disabled'].parsed_spec.transport, 'stdio')
+                self.assertTrue(entries['remote-enabled'].raw_payload['enabled'])
+                self.assertEqual(entries['remote-enabled'].parsed_spec.transport, 'http')
+                adapter.enable_server(_spec())
+                self.assertIn('exa', json.loads(path.read_text())['mcp'])
+                self.assertEqual([p for p in home.rglob('opencode.json*') if p.suffix in {'.json', '.jsonc'}], [path])
+
+    def test_opencode_new_install_writes_modern_jsonc_and_keeps_jsonc_read_support(self) -> None:
+        with TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            adapter = _adapter('opencode', home=home)
+            modern = home / '.config/opencode/opencode.jsonc'
+            adapter.enable_server(_spec())
+            self.assertEqual(adapter.config_path, modern)
+            self.assertFalse((home / '.opencode/opencode.jsonc').exists())
+            modern.write_text('// fixture comment\n{"theme":"test", "mcp":{"exa":{"type":"remote", "url":"https://example.com",},},}\n')
+            self.assertEqual(adapter.scan(()).entries[0].parsed_spec.transport, 'http')
+            adapter.enable_server(_spec())
+            self.assertEqual(json.loads(modern.read_text())['theme'], 'test')
+
+    def test_opencode_unreadable_source_does_not_hide_valid_entries_or_allow_writes(self) -> None:
+        with TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            legacy = home / '.opencode/opencode.jsonc'
+            modern = home / '.config/opencode/opencode.jsonc'
+            for path in (legacy, modern):
+                path.parent.mkdir(parents=True)
+                path.write_text('{"mcp":{"exa":{"type":"remote","url":"https://example.com"}}}')
+            read_text = Path.read_text
+            def read(path, *args, **kwargs):
+                if path == modern:
+                    raise PermissionError('fixture unreadable')
+                return read_text(path, *args, **kwargs)
+            adapter = _adapter('opencode', home=home)
+            before = [p.read_bytes() for p in (legacy, modern)]
+            with mock.patch.object(Path, 'read_text', read):
+                scan = adapter.scan(())
+                self.assertEqual([e.name for e in scan.entries], ['exa'])
+                self.assertIn('unreadable', scan.scan_issue)
+                with self.assertRaises(MutationError):
+                    adapter.enable_server(_spec())
+            self.assertEqual([p.read_bytes() for p in (legacy, modern)], before)
+
+    def test_opencode_merges_partial_overrides_and_reports_entry_source(self) -> None:
+        with TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            legacy = home / '.opencode/opencode.jsonc'
+            current = home / '.config/opencode/opencode.json'
+            modern = current.with_suffix('.jsonc')
+            for path, payload in (
+                (legacy, {'mcp': {'exa': {'type': 'local', 'command': ['node', 'old.js'], 'environment': {'A': 'one'}, 'enabled': True}}}),
+                (current, {'mcp': {'exa': {'command': ['node', 'new.js'], 'environment': {'B': 'two'}}}}),
+                (modern, {'mcp': {'exa': {'enabled': False}}, 'theme': 'test'}),
+            ):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(json.dumps(payload))
+            adapter = _adapter('opencode', home=home)
+            scan = adapter.scan((_spec(),))
+            entry = scan.entries[0]
+            self.assertEqual(entry.parsed_spec.args, ('new.js',))
+            self.assertEqual(dict(entry.parsed_spec.env), {'A': 'one', 'B': 'two'})
+            self.assertFalse(entry.raw_payload['enabled'])
+            choices = config_choices_payload('exa', _spec(), (scan,))
+            self.assertEqual(choices[1]['configPath'], str(modern))
+            # A higher file with unrelated settings is not the server's source.
+            modern.write_text('{"theme":"test"}')
+            choices = config_choices_payload('exa', _spec(), (adapter.scan((_spec(),)),))
+            self.assertEqual(choices[1]['configPath'], str(current))
+            plan = build_identity_plan((adapter.scan(()),))
+            self.assertEqual(plan.groups[0].sightings[0].config_path, str(current))
+
+    def test_opencode_reselects_write_target_when_higher_config_appears(self) -> None:
+        with TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            legacy = home / ".opencode" / "opencode.jsonc"
+            legacy.parent.mkdir(parents=True)
+            legacy.write_text("{}")
+            adapter = _adapter("opencode", home=home)
+            adapter.enable_server(_spec())
+            self.assertEqual(adapter.config_path, legacy)
+            modern = home / ".config" / "opencode" / "opencode.jsonc"
+            modern.parent.mkdir(parents=True)
+            modern.write_text('{"theme":"test"}')
+            adapter.enable_server(_spec())
+            self.assertEqual(adapter.config_path, modern)
+            self.assertIn("exa", json.loads(modern.read_text())["mcp"])
+            self.assertNotIn("mcp", json.loads(legacy.read_text()))
+
+    def test_opencode_enable_consolidates_only_target_server_then_disable_removes_all(self) -> None:
+        with TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            paths = [home / '.opencode/opencode.jsonc', home / '.config/opencode/opencode.json', home / '.config/opencode/opencode.jsonc']
+            for path in paths:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(json.dumps({'theme': 'test', 'mcp': {
+                    'exa': {'type': 'remote', 'url': 'https://old.example.com', 'enabled': False},
+                    'other': {'type': 'local', 'command': ['other']},
+                }}))
+            adapter = _adapter('opencode', home=home)
+            adapter.enable_server(_spec())
+            for path in paths:
+                payload = json.loads(path.read_text())
+                self.assertEqual(payload['theme'], 'test')
+                self.assertIn('other', payload['mcp'])
+                self.assertEqual('exa' in payload['mcp'], path == paths[-1])
+            self.assertEqual(next(e for e in adapter.scan((_spec(),)).entries if e.name == 'exa').state, 'managed')
+            adapter.disable_server('exa')
+            self.assertFalse(adapter.has_binding('exa'))
+
+    def test_opencode_invalid_source_retains_valid_reads_but_blocks_all_mutation(self) -> None:
+        with TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            legacy = home / '.opencode/opencode.jsonc'
+            modern = home / '.config/opencode/opencode.jsonc'
+            legacy.parent.mkdir(parents=True)
+            modern.parent.mkdir(parents=True)
+            legacy.write_text('{"mcp":{"exa":{"type":"local","command":["node"]}}}')
+            modern.write_text('{ invalid jsonc')
+            before = [p.read_bytes() for p in (legacy, modern)]
+            adapter = _adapter('opencode', home=home)
+            scan = adapter.scan(())
+            self.assertEqual([e.name for e in scan.entries], ['exa'])
+            self.assertIsNotNone(scan.scan_issue)
+            for mutate in (lambda: adapter.enable_server(_spec()), lambda: adapter.disable_server('exa')):
+                with self.assertRaises(MutationError):
+                    mutate()
+                self.assertEqual([p.read_bytes() for p in (legacy, modern)], before)
+
     def test_classifies_managed_when_content_matches(self) -> None:
         with TemporaryDirectory() as tmp:
             home = Path(tmp)
@@ -400,7 +551,7 @@ profiles:
             payload = json.loads(adapter.config_path.read_text(encoding="utf-8"))
             self.assertEqual(payload["mcpServers"]["remote"]["type"], "http")
 
-    def test_enable_removes_opencode_duplicate_from_xdg_config(self) -> None:
+    def test_enable_reuses_opencode_existing_xdg_json_config(self) -> None:
         with TemporaryDirectory() as tmp:
             home = Path(tmp)
             xdg_config_home = home / ".config"
@@ -426,7 +577,9 @@ profiles:
             canonical = json.loads(adapter.config_path.read_text(encoding="utf-8"))
             official = json.loads(official_path.read_text(encoding="utf-8"))
             self.assertIn("exa", canonical["mcp"])
-            self.assertNotIn("mcp", official)
+            self.assertEqual(adapter.config_path, official_path)
+            self.assertEqual(canonical, official)
+            self.assertFalse((home / ".opencode" / "opencode.jsonc").exists())
 
     def test_disable_removes_opencode_from_all_discovery_paths(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -573,7 +726,7 @@ profiles:
                 adapter.enable_server(_spec())
 
         self.assertEqual(captured.exception.status, 409)
-        self.assertIn("not valid JSONC", str(captured.exception))
+        self.assertIn("invalid JSONC", str(captured.exception))
 
     def test_scan_reports_malformed_config_without_raising(self) -> None:
         with TemporaryDirectory() as tmp:

@@ -244,7 +244,7 @@ class OpenCodeResolverTests(unittest.TestCase):
         self.assertEqual(loaded.path, config)
         self.assertEqual(loaded.format, "jsonc")
 
-    def test_xdg_jsonc_static_path_is_not_an_mcp_mutation_path(self) -> None:
+    def test_mcp_paths_reuse_static_sources_and_default_to_modern_jsonc(self) -> None:
         with TemporaryDirectory() as temp:
             root = Path(temp)
             context = resolve_context({
@@ -261,7 +261,8 @@ class OpenCodeResolverTests(unittest.TestCase):
 
             mutation_paths = profile.resolve_discovery_config_paths(context)
 
-        self.assertNotIn(opencode_config_paths(context)[-1], mutation_paths)
+        self.assertEqual(set(opencode_config_paths(context)), set(mutation_paths))
+        self.assertEqual(profile.resolve_config_path(context), opencode_config_paths(context)[-1])
 
 
 if __name__ == "__main__":

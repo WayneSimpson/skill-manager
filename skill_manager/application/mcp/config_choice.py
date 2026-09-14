@@ -134,7 +134,7 @@ def _config_choices(
                     observed_harness=scan.harness,
                     label=f"{scan.label} config",
                     logo_key=scan.logo_key,
-                    config_path=str(scan.config_path) if scan.config_present else None,
+                    config_path=str(observed.config_path or scan.config_path) if scan.config_present else None,
                     payload_preview=redact_payload(dict(observed.raw_payload or {})),
                     spec=observed.parsed_spec,
                     env=annotate_redacted_env(observed.parsed_spec.env),

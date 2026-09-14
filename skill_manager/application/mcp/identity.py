@@ -68,7 +68,7 @@ def build_identity_plan(
                         name=entry.name,
                         harness=scan.harness,
                         label=scan.label,
-                        config_path=str(scan.config_path) if scan.config_present else None,
+                        config_path=str(entry.config_path or scan.config_path) if scan.config_present else None,
                         reason=entry.parse_issue or "unable to parse unmanaged MCP entry",
                         payload=entry.raw_payload,
                     )
@@ -79,7 +79,7 @@ def build_identity_plan(
                     harness=scan.harness,
                     label=scan.label,
                     logo_key=scan.logo_key,
-                    config_path=str(scan.config_path) if scan.config_present else None,
+                    config_path=str(entry.config_path or scan.config_path) if scan.config_present else None,
                     payload=dict(entry.raw_payload or {}),
                     spec=entry.parsed_spec,
                 )

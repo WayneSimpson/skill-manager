@@ -6,6 +6,7 @@ from typing import Mapping
 
 from skill_manager.user_environment import live_user_environment_value
 from skill_manager.opencode import opencode_skill_paths
+from skill_manager.opencode.resolver import opencode_config_paths, opencode_write_config_path
 
 from .contracts import (
     CommandFileBindingProfile,
@@ -243,12 +244,11 @@ SUPPORTED_HARNESS_DEFINITIONS: tuple[HarnessDefinition, ...] = (
                 discovery_root_resolvers=(_opencode_configured_skill_roots,),
             ),
             "mcp": ConfigSubtreeBindingProfile(
-                config_path_resolver=lambda context: context.home / ".opencode" / "opencode.jsonc",
+                config_path_resolver=opencode_write_config_path,
                 discovery_config_path_resolvers=(
-                    lambda context: context.xdg_config_home / "opencode" / "opencode.json",
-                ),
-                source_install_config_path_resolvers=(
-                    lambda context: context.home / ".opencode" / "opencode.jsonc",
+                    lambda context: opencode_config_paths(context)[0],
+                    lambda context: opencode_config_paths(context)[1],
+                    lambda context: opencode_config_paths(context)[2],
                 ),
                 file_format="jsonc",
                 subtree_path=("mcp",),

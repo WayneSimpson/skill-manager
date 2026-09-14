@@ -152,6 +152,52 @@ def _seed_manual_remote(harness: AppTestHarness, name: str = "remote") -> None:
 
 
 class McpRoutesTests(unittest.TestCase):
+    def test_opencode_enable_consolidates_existing_enabled_duplicates(self) -> None:
+        with AppTestHarness() as harness:
+            _seed_manual_remote(harness, name="remote")
+            legacy = harness.spec.home / ".opencode" / "opencode.jsonc"
+            modern = harness.spec.xdg_config_home / "opencode" / "opencode.jsonc"
+            for path in (legacy, modern):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text('{"mcp":{"remote":{"type":"remote","url":"https://mcp.example.com","enabled":true}}}')
+            harness.container.mcp_read_models.invalidate()
+            result = harness.post_json("/api/mcp/servers/remote/enable", {"harness": "opencode"})
+            self.assertTrue(result["ok"])
+            self.assertNotIn("mcp", json.loads(legacy.read_text()))
+            self.assertTrue(json.loads(modern.read_text())["mcp"]["remote"]["enabled"])
+
+    def test_opencode_bulk_enable_replaces_disabled_override(self) -> None:
+        with AppTestHarness() as harness:
+            _seed_manual_remote(harness, name="remote")
+            modern = harness.spec.xdg_config_home / "opencode" / "opencode.jsonc"
+            modern.parent.mkdir(parents=True, exist_ok=True)
+            modern.write_text('{"mcp":{"remote":{"type":"remote","url":"https://mcp.example.com","enabled":false}}}')
+            harness.container.mcp_read_models.invalidate()
+            result = harness.post_json("/api/mcp/servers/remote/set-harnesses", {"target": "enabled"})
+            self.assertIn("opencode", result["succeeded"])
+            self.assertTrue(json.loads(modern.read_text())["mcp"]["remote"]["enabled"])
+
+    def test_opencode_modern_jsonc_discovery_and_enable_disable_use_existing_file(self) -> None:
+        with AppTestHarness() as harness:
+            path = harness.spec.xdg_config_home / "opencode" / "opencode.jsonc"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text('// fixture\n{"theme":"test","mcp":{"remote":{"type":"remote","url":"https://mcp.example.com","enabled":false}}}')
+            harness.container.mcp_read_models.invalidate()
+            unmanaged = harness.get_json("/api/mcp/unmanaged/by-server")
+            meta = next(h for h in unmanaged["harnesses"] if h["harness"] == "opencode")
+            self.assertTrue(meta["configPresent"])
+            self.assertEqual(meta["configPath"], str(path))
+            server = next(s for s in unmanaged["servers"] if s["name"] == "remote")
+            self.assertEqual(server["sightings"][0]["configPath"], str(path))
+            _seed_manual_remote(harness, name="remote")
+            harness.post_json("/api/mcp/servers/remote/enable", {"harness": "opencode"})
+            payload = json.loads(path.read_text())
+            self.assertTrue(payload["mcp"]["remote"]["enabled"])
+            self.assertEqual(payload["theme"], "test")
+            self.assertFalse((harness.spec.home / ".opencode" / "opencode.jsonc").exists())
+            harness.post_json("/api/mcp/servers/remote/disable", {"harness": "opencode"})
+            self.assertNotIn("mcp", json.loads(path.read_text()))
+
     def test_list_servers_starts_empty(self) -> None:
         with AppTestHarness() as harness:
             payload = harness.get_json("/api/mcp/servers")
@@ -400,7 +446,7 @@ class McpRoutesTests(unittest.TestCase):
             self.assertTrue((harness.spec.home / ".cursor" / "mcp.json").is_file())
             self.assertTrue((harness.spec.home / ".claude.json").is_file())
             self.assertTrue((harness.spec.home / ".codex" / "config.toml").is_file())
-            self.assertTrue((harness.spec.home / ".opencode" / "opencode.jsonc").is_file())
+            self.assertTrue((harness.spec.xdg_config_home / "opencode" / "opencode.jsonc").is_file())
             self.assertTrue((harness.spec.home / ".openclaw" / "openclaw.json").is_file())
             self.assertTrue(harness.spec.hermes_config_path.is_file())
 
