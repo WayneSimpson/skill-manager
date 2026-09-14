@@ -2294,3 +2294,9 @@ https://clickup.com/careers
 [13222335ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:45417/api/mcp/servers:0
 [13227337ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:45417/api/mcp/servers:0
 [13228338ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:45417/api/mcp/servers:0
+[13233340ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:45417/api/mcp/servers:0
+[13234341ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:45417/api/mcp/servers:0
+[13239342ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:45417/api/mcp/servers:0
+[13240344ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:45417/api/mcp/servers:0
+[13245345ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:45417/api/mcp/servers:0
+[13246346ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:45417/api/mcp/servers:0
