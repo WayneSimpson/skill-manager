@@ -98,6 +98,10 @@ export function OpenCodeRuntimeSkillsPanel() {
                 : copy.snapshotCount(status.skillCount)
               : copy.checking}
           </p>
+          {status?.lastRefreshed ? (
+            <p>{copy.lastRefreshed} <time dateTime={status.lastRefreshed}>{status.lastRefreshed}</time></p>
+          ) : null}
+          {status?.stale ? <p role="status">{copy.staleSnapshot}</p> : null}
           {status?.serverUrl && status.directory ? (
             <div className="settings-runtime__connection">
               <span className="settings-path">{status.serverUrl}</span>

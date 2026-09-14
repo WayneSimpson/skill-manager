@@ -38,6 +38,8 @@ const englishSettingsCopy = {
     clearing: "Clearing...",
     statusLabel: "Connection status",
     snapshotLabel: "Runtime snapshot",
+    lastRefreshed: "Last successful refresh:",
+    staleSnapshot: "Last-known snapshot; not checked with OpenCode since restart or the latest refresh failure. Refresh explicitly to check for changes.",
     statuses: {
       disconnected: "Disconnected",
       ready: "Ready",
@@ -97,6 +99,8 @@ export const settingsCopy = {
       clearing: "清除中...",
       statusLabel: "连接状态",
       snapshotLabel: "运行时快照",
+      lastRefreshed: "上次成功刷新：",
+      staleSnapshot: "这是上次保存的快照；重启或最近一次刷新失败后尚未向 OpenCode 验证。请手动刷新以检查变化。",
       statuses: {
         disconnected: "未连接",
         ready: "就绪",

@@ -107,7 +107,7 @@ def build_backend_container(
 
     skills_store = SkillStore(paths.skills_store_root, manifest_path=paths.skills_store_manifest)
     runtime_skills = RuntimeSkillsService(
-        store=RuntimeSkillSnapshotStore(),
+        store=RuntimeSkillSnapshotStore(paths.state_dir / "opencode-runtime-skills.json"),
         client=runtime_skill_client or OpenCodeRuntimeSkillsClient(),
     )
     skills_read_models = SkillsReadModelService.from_kernel(

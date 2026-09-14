@@ -4,10 +4,11 @@ import base64
 import json
 import os
 from pathlib import Path
+from tempfile import TemporaryDirectory
 import unittest
 from urllib.error import HTTPError
 from urllib.request import ProxyHandler
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from skill_manager.application.skills.runtime import (
     OpenCodeRuntimeSkillsClient,
@@ -50,7 +51,98 @@ class _FakeOpener:
         return self.response
 
 
+class RuntimeSnapshotPersistenceTests(unittest.TestCase):
+    def test_restore_replace_error_and_clear_without_network_or_credentials(self) -> None:
+        with TemporaryDirectory() as temp:
+            path = Path(temp) / "state" / "runtime.json"
+            client = Mock()
+            records = (RuntimeSkillRecord("Saved", "", Path("/plugin/skill/SKILL.md"), "body"),)
+            client.fetch.return_value = records
+            service = RuntimeSkillsService(store=RuntimeSkillSnapshotStore(path), client=client)
+            ready = service.refresh(server_url="http://localhost:4096", directory=Path("/project"),
+                                    username="private-user", password="private-password")
+            self.assertFalse(ready["stale"])
+            self.assertIsNotNone(ready["lastRefreshed"])
+            saved = path.read_bytes()
+            self.assertNotIn(b"private-user", saved)
+            self.assertNotIn(b"private-password", saved)
+            self.assertEqual(set(json.loads(saved)), {"version", "records", "directory", "serverUrl", "lastRefreshed"})
+
+            client.reset_mock()
+            restored = RuntimeSkillsService(store=RuntimeSkillSnapshotStore(path), client=client)
+            self.assertEqual(restored.records(), records)
+            self.assertTrue(restored.status()["stale"])
+            self.assertEqual(restored.status()["lastRefreshed"], ready["lastRefreshed"])
+            client.fetch.assert_not_called()
+
+            client.fetch.side_effect = RuntimeSkillClientError("runtime skill server returned HTTP 401")
+            with self.assertRaises(RuntimeSkillClientError):
+                restored.refresh(server_url="http://localhost:4097", directory=Path("/other"), username=None, password=None)
+            self.assertEqual(path.read_bytes(), saved)
+            self.assertEqual(restored.records(), records)
+            self.assertEqual(restored.status()["status"], "error")
+            self.assertEqual(restored.status()["serverUrl"], ready["serverUrl"])
+            self.assertEqual(restored.status()["lastRefreshed"], ready["lastRefreshed"])
+            self.assertTrue(restored.status()["stale"])
+
+            client.fetch.side_effect = None
+            client.fetch.return_value = ()
+            replaced = restored.refresh(server_url="http://localhost:4097", directory=Path("/other"), username=None, password=None)
+            self.assertFalse(replaced["stale"])
+            self.assertIsNone(replaced["error"])
+            self.assertEqual(RuntimeSkillSnapshotStore(path).records(), ())
+            self.assertEqual(RuntimeSkillSnapshotStore(path).status()["directory"], "/other")
+            restored.disconnect()
+            self.assertFalse(path.exists())
+            self.assertEqual(RuntimeSkillSnapshotStore(path).status()["status"], "disconnected")
+
+    def test_corrupt_snapshot_does_not_prevent_startup(self) -> None:
+        with TemporaryDirectory() as temp:
+            path = Path(temp) / "runtime.json"
+            for contents in ("{broken", '{"version": 1, "serverUrl": null}'):
+                path.write_text(contents)
+                store = RuntimeSkillSnapshotStore(path)
+                self.assertEqual(store.records(), ())
+                self.assertEqual(store.status()["status"], "error")
+                self.assertTrue(store.status()["stale"])
+
+    def test_save_failure_retains_last_successful_snapshot(self) -> None:
+        with TemporaryDirectory() as temp:
+            path = Path(temp) / "runtime.json"
+            store = RuntimeSkillSnapshotStore(path)
+            store.replace(records=(), server_url="http://localhost:4096", directory="/original")
+            before = path.read_bytes()
+            service = RuntimeSkillsService(store=store, client=Mock())
+            service.client.fetch.return_value = (RuntimeSkillRecord("New", "", None, "body"),)
+            with patch("skill_manager.application.skills.runtime.atomic_write_text", side_effect=OSError):
+                with self.assertRaises(RuntimeSkillClientError):
+                    service.refresh(server_url="http://localhost:4097", directory=Path("/other"), username=None, password=None)
+            self.assertEqual(path.read_bytes(), before)
+            self.assertEqual(store.records(), ())
+            self.assertEqual(store.status()["directory"], "/original")
+            self.assertTrue(store.status()["stale"])
+
+
 class RuntimeSkillsClientTests(unittest.TestCase):
+    def test_uses_agent_registry_with_plugin_skill_not_v2_registry(self) -> None:
+        calls = []
+
+        class DifferentRegistries:
+            def open(self, request, *, timeout):
+                calls.append(request.full_url)
+                if "/api/skill?" in request.full_url:
+                    return _FakeResponse(b'{"location":{"directory":"/project"},"data":[]}')
+                return _FakeResponse(json.dumps([{
+                    "name": "n8n-agents-official", "description": "Plugin-provided skill",
+                    "location": "/plugins/example/skills/n8n-agents-official/SKILL.md",
+                    "content": "# Plugin skill",
+                }]).encode())
+
+        client = OpenCodeRuntimeSkillsClient(opener=DifferentRegistries())
+        records = client.fetch(server_url="http://127.0.0.1:4096", directory=Path("/project"), username=None, password=None)
+        self.assertEqual([r.name for r in records], ["n8n-agents-official"])
+        self.assertEqual(calls, ["http://127.0.0.1:4096/skill?directory=%2Fproject"])
+
     def test_default_opener_disables_environment_proxies_without_network_access(self) -> None:
         proxy_env = {
             "HTTP_PROXY": "http://198.51.100.10:8080",
@@ -68,9 +160,7 @@ class RuntimeSkillsClientTests(unittest.TestCase):
 
     def test_fetches_release_api_with_basic_auth_and_ignores_invalid_entries(self) -> None:
         body = json.dumps(
-            {
-                "location": {"directory": "/project"},
-                "data": [
+            [
                     {
                         "name": "Release Skill",
                         "description": "A runtime skill",
@@ -80,15 +170,14 @@ class RuntimeSkillsClientTests(unittest.TestCase):
                     {
                         "name": "Builtin Customize",
                         "description": "Built-in skill",
-                        "location": "/builtin/customize-opencode.md",
+                        "location": "<built-in>",
                         "content": "# Customize\n",
                         "slash": "/customize",
                     },
                     {"name": "missing content and location"},
                     {"name": "invalid description", "description": []},
                     "not an entry",
-                ],
-            }
+            ]
         ).encode()
         opener = _FakeOpener(_FakeResponse(body))
         client = OpenCodeRuntimeSkillsClient(opener=opener)
@@ -101,8 +190,7 @@ class RuntimeSkillsClientTests(unittest.TestCase):
         )
 
         assert opener.request is not None
-        self.assertIn("/api/skill?", opener.request.full_url)
-        self.assertIn("location%5Bdirectory%5D=%2Fproject", opener.request.full_url)
+        self.assertEqual("http://127.0.0.1:4096/skill?directory=%2Fproject", opener.request.full_url)
         expected_auth = "Basic " + base64.b64encode(b"user:password").decode()
         self.assertEqual(opener.request.get_header("Authorization"), expected_auth)
         self.assertEqual(opener.timeout, 5.0)
@@ -112,12 +200,12 @@ class RuntimeSkillsClientTests(unittest.TestCase):
         )
         self.assertEqual(records[0].package_path, Path("/cache/plugin/skills/example"))
         self.assertEqual(records[1].package_path, None)
+        self.assertEqual(records[1].location, None)
+        self.assertEqual(records[1].content, "# Customize\n")
         self.assertEqual(records[1].slash, "/customize")
 
     def test_retains_file_locations_outside_the_requested_context_directory(self) -> None:
-        payload = {
-            "location": {"directory": "/project"},
-            "data": [
+        payload = [
                 {
                     "name": "Plugin Cache Skill",
                     "description": "",
@@ -130,21 +218,19 @@ class RuntimeSkillsClientTests(unittest.TestCase):
                     "content": "# Content only",
                 },
                 {"name": "No runtime document"},
-            ],
-        }
+        ]
 
-        records = _parse_runtime_skill_response(payload, allowed_directory=Path("/project"))
+        records = _parse_runtime_skill_response(payload)
 
         self.assertEqual(
             [record.name for record in records],
             ["Plugin Cache Skill", "Builtin Customize", "No runtime document"],
         )
 
-    def test_rejects_response_with_a_different_context_directory(self) -> None:
-        with self.assertRaisesRegex(RuntimeSkillClientError, "context directory"):
+    def test_rejects_v2_wrapper_instead_of_treating_it_as_agent_inventory(self) -> None:
+        with self.assertRaisesRegex(RuntimeSkillClientError, "invalid response"):
             _parse_runtime_skill_response(
                 {"location": {"directory": "/cache"}, "data": []},
-                allowed_directory=Path("/project"),
             )
 
     def test_rejects_non_loopback_server_without_opening_network(self) -> None:
@@ -184,7 +270,7 @@ class RuntimeSkillsClientTests(unittest.TestCase):
     def test_reports_http_source_failure_without_returning_response_body(self) -> None:
         opener = _FakeOpener(
             HTTPError(
-                "http://127.0.0.1:4096/api/skill",
+                "http://127.0.0.1:4096/skill",
                 503,
                 "unavailable",
                 {},

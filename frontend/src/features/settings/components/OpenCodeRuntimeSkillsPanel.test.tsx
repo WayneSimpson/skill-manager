@@ -13,6 +13,8 @@ const disconnectedStatus = {
   directory: null,
   skillCount: 0,
   error: null,
+  lastRefreshed: null,
+  stale: false,
 } as const;
 
 describe("OpenCodeRuntimeSkillsPanel", () => {
@@ -23,6 +25,22 @@ describe("OpenCodeRuntimeSkillsPanel", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     fetchMock.mockReset();
+  });
+
+  it.each(["ready", "error"])("shows last-known time for restored or error-retained %s snapshots without refresh", async (status) => {
+    fetchMock.mockResolvedValue(okJson({
+      ...disconnectedStatus, status, skillCount: 2, stale: true,
+      lastRefreshed: "2026-09-14T10:00:00+00:00",
+      serverUrl: "http://127.0.0.1:4096", directory: "/project",
+      error: status === "error" ? "Runtime server unavailable" : null,
+    }));
+    renderWithAppProviders(<OpenCodeRuntimeSkillsPanel />);
+    expect(await screen.findByText(/Last-known snapshot/)).toBeInTheDocument();
+    expect(screen.getByText("2026-09-14T10:00:00+00:00")).toHaveAttribute("dateTime", "2026-09-14T10:00:00+00:00");
+    expect(screen.getByRole("button", { name: "Refresh OpenCode snapshot" })).toBeDisabled();
+    if (status === "error") expect(screen.getByRole("alert")).toHaveTextContent("Runtime server unavailable");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/opencode/runtime-skills/status");
   });
 
   it("requires explicit consent before it can request a runtime refresh", async () => {

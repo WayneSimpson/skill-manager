@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import base64
 import hashlib
 import ipaddress
@@ -13,8 +14,11 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlsplit, urlunsplit
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
+from skill_manager.atomic_files import atomic_write_text
 
-RUNTIME_SKILLS_API_PATH = "/api/skill"
+
+# OpenCode's agent tool uses Skill.Service, not the separate V2 registry.
+RUNTIME_SKILLS_API_PATH = "/skill"
 RUNTIME_SKILLS_TIMEOUT_SECONDS = 5.0
 RUNTIME_SKILLS_MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 MAX_RUNTIME_SKILL_NAME_LENGTH = 200
@@ -117,7 +121,7 @@ class OpenCodeRuntimeSkillsClient:
             payload = json.loads(body.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
             raise RuntimeSkillClientError("runtime skill server returned invalid JSON") from error
-        return _parse_runtime_skill_response(payload, allowed_directory=directory.resolve())
+        return _parse_runtime_skill_response(payload)
 
     def _read_bounded_body(self, response) -> bytes:
         content_length = response.headers.get("Content-Length") if hasattr(response, "headers") else None
@@ -143,14 +147,50 @@ class _RuntimeSnapshot:
     server_url: str | None = None
     directory: str | None = None
     error: str | None = None
+    last_refreshed: str | None = None
+    stale: bool = False
 
 
 class RuntimeSkillSnapshotStore:
-    """Process-local runtime data; nothing from the connection is persisted."""
+    """Restore last-known data locally; only deliberate refreshes replace it."""
 
-    def __init__(self) -> None:
-        self._snapshot = _RuntimeSnapshot()
+    def __init__(self, path: Path | None = None) -> None:
+        self._path = path
+        self._snapshot = self._restore()
         self._lock = Lock()
+
+    def _restore(self) -> _RuntimeSnapshot:
+        if self._path is None:
+            return _RuntimeSnapshot()
+        try:
+            with self._path.open("rb") as stream:
+                raw = stream.read(RUNTIME_SKILLS_MAX_RESPONSE_BYTES + 1)
+            if len(raw) > RUNTIME_SKILLS_MAX_RESPONSE_BYTES:
+                raise ValueError("snapshot too large")
+            payload = json.loads(raw)
+            if not isinstance(payload, dict) or payload.get("version") != 1:
+                raise ValueError("invalid snapshot")
+            server_url = _validate_server_url(payload["serverUrl"])
+            directory = payload["directory"]
+            refreshed = payload["lastRefreshed"]
+            if not isinstance(directory, str) or not Path(directory).is_absolute():
+                raise ValueError("invalid directory")
+            if not isinstance(refreshed, str) or datetime.fromisoformat(refreshed).tzinfo is None:
+                raise ValueError("invalid timestamp")
+            if not isinstance(payload["records"], list):
+                raise ValueError("invalid records")
+            records = tuple(
+                record for item in payload["records"]
+                if (record := _parse_runtime_skill_entry(item)) is not None
+            )
+            return _RuntimeSnapshot(
+                records=records, status="ready", server_url=server_url,
+                directory=directory, last_refreshed=refreshed, stale=True,
+            )
+        except FileNotFoundError:
+            return _RuntimeSnapshot()
+        except (OSError, ValueError, TypeError, KeyError, RuntimeSkillClientError):
+            return _RuntimeSnapshot(status="error", error="Saved runtime snapshot could not be restored.", stale=True)
 
     def records(self) -> tuple[RuntimeSkillRecord, ...]:
         with self._lock:
@@ -158,28 +198,56 @@ class RuntimeSkillSnapshotStore:
 
     def replace(self, *, records: tuple[RuntimeSkillRecord, ...], server_url: str, directory: str) -> None:
         with self._lock:
+            refreshed = datetime.now(timezone.utc).isoformat()
+            if self._path is not None:
+                # Explicit allowlist: connection credentials never enter the snapshot.
+                payload = {
+                    "version": 1, "serverUrl": server_url, "directory": directory,
+                    "lastRefreshed": refreshed,
+                    "records": [
+                        {"name": r.name, "description": r.description,
+                         "location": str(r.location) if r.location is not None else None,
+                         "content": r.content, "slash": r.slash}
+                        for r in records
+                    ],
+                }
+                try:
+                    encoded = json.dumps(payload, ensure_ascii=False)
+                    if len(encoded.encode("utf-8")) > RUNTIME_SKILLS_MAX_RESPONSE_BYTES:
+                        raise RuntimeSkillClientError("Runtime snapshot is too large to save.")
+                    atomic_write_text(self._path, encoded)
+                except OSError:
+                    raise RuntimeSkillClientError("Runtime snapshot could not be saved.") from None
             self._snapshot = _RuntimeSnapshot(
                 records=records,
                 status="ready",
                 server_url=server_url,
                 directory=directory,
+                last_refreshed=refreshed,
             )
 
     def mark_error(self, *, server_url: str, directory: str, error: str) -> None:
         with self._lock:
             current = self._snapshot
-            retained_server_url = current.server_url if current.records else server_url
-            retained_directory = current.directory if current.records else directory
+            retained_server_url = current.server_url if current.last_refreshed else server_url
+            retained_directory = current.directory if current.last_refreshed else directory
             self._snapshot = _RuntimeSnapshot(
                 records=current.records,
                 status="error",
                 server_url=retained_server_url,
                 directory=retained_directory,
                 error=error,
+                last_refreshed=current.last_refreshed,
+                stale=True,
             )
 
     def clear(self) -> None:
         with self._lock:
+            if self._path is not None:
+                try:
+                    self._path.unlink(missing_ok=True)
+                except OSError:
+                    raise RuntimeSkillClientError("Saved runtime snapshot could not be cleared.") from None
             self._snapshot = _RuntimeSnapshot()
 
     def status(self) -> dict[str, object]:
@@ -191,6 +259,8 @@ class RuntimeSkillSnapshotStore:
                 "directory": current.directory,
                 "skillCount": len(current.records),
                 "error": current.error,
+                "lastRefreshed": current.last_refreshed,
+                "stale": current.stale,
             }
 
 
@@ -226,6 +296,11 @@ class RuntimeSkillsService:
                 username=username,
                 password=password,
             )
+            self.store.replace(
+                records=records,
+                server_url=normalized_server_url,
+                directory=str(directory),
+            )
         except RuntimeSkillClientError as error:
             self.store.mark_error(
                 server_url=normalized_server_url,
@@ -233,11 +308,6 @@ class RuntimeSkillsService:
                 error=str(error),
             )
             raise
-        self.store.replace(
-            records=records,
-            server_url=normalized_server_url,
-            directory=str(directory),
-        )
         return self.store.status()
 
     def disconnect(self) -> dict[str, object]:
@@ -282,35 +352,17 @@ def _validate_server_url(server_url: str) -> str:
 
 
 def _runtime_skills_url(server_url: str, directory: Path) -> str:
-    return f"{server_url}{RUNTIME_SKILLS_API_PATH}?{urlencode({'location[directory]': str(directory)})}"
+    return f"{server_url}{RUNTIME_SKILLS_API_PATH}?{urlencode({'directory': str(directory)})}"
 
 
 def _parse_runtime_skill_response(
     payload: object,
-    *,
-    allowed_directory: Path | None = None,
 ) -> tuple[RuntimeSkillRecord, ...]:
-    if not isinstance(payload, dict):
+    if not isinstance(payload, list):
         raise RuntimeSkillClientError("runtime skill server returned an invalid response")
-    location = payload.get("location")
-    data = payload.get("data")
-    response_directory = location.get("directory") if isinstance(location, dict) else None
-    if not isinstance(location, dict) or not isinstance(response_directory, str) or not isinstance(data, list):
-        raise RuntimeSkillClientError("runtime skill server returned an invalid response")
-    if len(response_directory) > MAX_RUNTIME_SKILL_LOCATION_LENGTH:
-        raise RuntimeSkillClientError("runtime skill server returned an invalid response")
-    try:
-        response_directory_path = Path(response_directory)
-    except (OSError, ValueError):
-        raise RuntimeSkillClientError("runtime skill server returned an invalid response") from None
-    if not response_directory_path.is_absolute():
-        raise RuntimeSkillClientError("runtime skill server returned an invalid response")
-    response_directory_path = response_directory_path.resolve()
-    if allowed_directory is not None and response_directory_path != allowed_directory.resolve():
-        raise RuntimeSkillClientError("runtime skill response context directory does not match the requested directory")
 
     records: list[RuntimeSkillRecord] = []
-    for item in data:
+    for item in payload:
         record = _parse_runtime_skill_entry(item)
         if record is not None:
             records.append(record)
@@ -339,9 +391,9 @@ def _parse_runtime_skill_entry(item: object) -> RuntimeSkillRecord | None:
             candidate = Path(location)
         except (OSError, ValueError):
             return None
-        if not candidate.is_absolute() or candidate.suffix.casefold() != ".md":
-            return None
-        path = candidate
+        # Agent-facing built-ins use a non-filesystem location marker.
+        if candidate.is_absolute() and candidate.suffix.casefold() == ".md":
+            path = candidate
 
     slash = item.get("slash")
     try:

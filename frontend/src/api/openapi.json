@@ -2803,6 +2803,17 @@
             ],
             "title": "Error"
           },
+          "lastRefreshed": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastrefreshed"
+          },
           "serverUrl": {
             "anyOf": [
               {
@@ -2817,6 +2828,10 @@
           "skillCount": {
             "title": "Skillcount",
             "type": "integer"
+          },
+          "stale": {
+            "title": "Stale",
+            "type": "boolean"
           },
           "status": {
             "enum": [
@@ -2833,7 +2848,9 @@
           "serverUrl",
           "directory",
           "skillCount",
-          "error"
+          "error",
+          "lastRefreshed",
+          "stale"
         ],
         "title": "OpenCodeRuntimeSkillsStatusResponse",
         "type": "object"

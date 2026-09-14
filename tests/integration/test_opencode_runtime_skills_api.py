@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
 import unittest
 
+from skill_manager.application import build_backend_container
 from skill_manager.application.skills.runtime import RuntimeSkillClientError, RuntimeSkillRecord
 from skill_manager.directory_links import is_directory_link
 
@@ -24,6 +26,25 @@ class _RuntimeClient:
 
 
 class OpenCodeRuntimeSkillsApiTests(unittest.TestCase):
+    def test_restart_restores_inventory_without_contacting_opencode(self) -> None:
+        client = _RuntimeClient([RuntimeSkillRecord("Restored Skill", "", None, "saved content")])
+        with AppTestHarness(runtime_skill_client=client) as harness:
+            ready = harness.post_json("/api/opencode/runtime-skills/refresh", {
+                "consent": True, "serverUrl": "http://localhost:4096", "directory": "/project",
+                "username": "transient-user", "password": "transient-secret",
+            })
+            restarted_client = _RuntimeClient(error=AssertionError("startup must not contact OpenCode"))
+            restarted = build_backend_container(harness.spec.env(), runtime_skill_client=restarted_client)
+            try:
+                status = restarted.opencode_runtime_skills.status()
+                self.assertTrue(status["stale"])
+                self.assertEqual(status["lastRefreshed"], ready["lastRefreshed"])
+                rows = restarted.skills_queries.list_skills()["rows"]
+                self.assertIn("Restored Skill", [row["name"] for row in rows])
+                self.assertEqual(restarted_client.calls, [])
+            finally:
+                restarted.db.close()
+
     def test_ordinary_inventory_scans_never_contact_runtime_server(self) -> None:
         client = _RuntimeClient()
 
@@ -98,6 +119,11 @@ class OpenCodeRuntimeSkillsApiTests(unittest.TestCase):
             self.assertEqual((shared_package / "scripts" / "run.py").read_text(encoding="utf-8"), "original bytes")
             self.assertTrue(is_directory_link(harness.spec.claude_root / "runtime-copy"))
             self.assertFalse(is_directory_link(plugin_package))
+            manifest = json.loads((harness.spec.skills_store_root.parent / "manifest.json").read_text())
+            self.assertIn(str(plugin_package), json.dumps(manifest))
+            stored = harness.container.skills_store.scan().packages
+            adopted = next(item for item in stored if item.package.declared_name == "Runtime Copy")
+            self.assertEqual(adopted.recorded_source_path, str(plugin_package))
 
     def test_runtime_manage_preflights_disabled_opencode_before_writing(self) -> None:
         holder: dict[str, Path] = {}
@@ -184,11 +210,12 @@ class OpenCodeRuntimeSkillsApiTests(unittest.TestCase):
             skills = harness.get_json("/api/skills")
             row = next(row for row in skills["rows"] if row["name"] == "Same Skill")
             detail = harness.get_json(f"/api/skills/{row['skillRef']}")
+            entry = harness.container.skills_queries.inventory().find(row["skillRef"])
+            self.assertEqual({s.scope for s in entry.sightings}, {"canonical", "runtime"})
 
         self.assertEqual(len([item for item in skills["rows"] if item["name"] == "Same Skill"]), 1)
-        self.assertEqual({item["scope"] for item in detail["locations"]}, {"canonical", "runtime"})
-        runtime_location = next(item for item in detail["locations"] if item["scope"] == "runtime")
-        self.assertEqual(runtime_location["sourceKind"], "runtime")
+        self.assertEqual(len(detail["locations"]), 1)
+        self.assertEqual(detail["locations"][0]["scope"], "canonical")
 
     def test_runtime_only_entries_expose_capability_reason_and_embedded_content(self) -> None:
         client = _RuntimeClient(
@@ -224,6 +251,11 @@ class OpenCodeRuntimeSkillsApiTests(unittest.TestCase):
             detail = harness.get_json(f"/api/skills/{embedded['skillRef']}")
             harness.post_json(f"/api/skills/{embedded['skillRef']}/manage")
             after_manage = harness.get_json("/api/skills")
+            embedded_package = next(
+                item for item in harness.container.skills_store.scan().packages
+                if item.package.declared_name == "Embedded Runtime"
+            )
+            self.assertIsNone(embedded_package.recorded_source_path)
 
         self.assertFalse(unavailable["actions"]["canManage"])
         self.assertIn("cannot be copied", unavailable["actions"]["canManageReason"])

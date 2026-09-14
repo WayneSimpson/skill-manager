@@ -224,6 +224,10 @@ class SkillInventory:
             )
             if entry is not None:
                 entry.add_sighting(sighting)
+                if entry.kind == "unmanaged" and entry.source_path is None:
+                    runtime_path = _readable_runtime_package_path(runtime_skill)
+                    if runtime_path is not None:
+                        entry.source_path = str(runtime_path)
                 continue
 
             key = _unmanaged_entry_key(runtime_skill.name, runtime_source, runtime_skill.revision)
@@ -241,6 +245,7 @@ class SkillInventory:
                     document_markdown=runtime_content,
                     runtime_only=True,
                     runtime_materialize_path=materialize_path,
+                    source_path=str(materialize_path) if materialize_path is not None else None,
                     runtime_content=runtime_content,
                     runtime_slash=runtime_skill.slash,
                     can_manage_reason=(

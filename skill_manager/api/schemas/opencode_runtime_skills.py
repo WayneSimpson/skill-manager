@@ -33,6 +33,8 @@ class OpenCodeRuntimeSkillsStatusResponse(BaseModel):
     directory: str | None
     skillCount: int
     error: str | None
+    lastRefreshed: str | None
+    stale: bool
 
 
 __all__ = [

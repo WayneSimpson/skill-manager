@@ -46,6 +46,9 @@ def refresh_runtime_skills(
 def disconnect_runtime_skills(
     container: BackendContainer = Depends(get_container),
 ) -> dict[str, object]:
-    result = container.opencode_runtime_skills.disconnect()
+    try:
+        result = container.opencode_runtime_skills.disconnect()
+    except RuntimeSkillClientError as error:
+        raise MutationError(str(error), status=500) from error
     container.skills_read_models.invalidate()
     return result

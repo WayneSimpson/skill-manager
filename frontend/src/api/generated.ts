@@ -1741,10 +1741,14 @@ export interface components {
             directory: string | null;
             /** Error */
             error: string | null;
+            /** Lastrefreshed */
+            lastRefreshed: string | null;
             /** Serverurl */
             serverUrl: string | null;
             /** Skillcount */
             skillCount: number;
+            /** Stale */
+            stale: boolean;
             /**
              * Status
              * @enum {string}

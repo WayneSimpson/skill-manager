@@ -45,10 +45,28 @@ def skill_detail_payload(
             **_manage_reason_payload(entry),
         },
         "harnessCells": [cell_payload(entry, column) for column in columns],
-        "locations": [sighting_payload(sighting) for sighting in entry.detail_sightings()],
+        "locations": _display_locations(entry),
         "sourceLinks": source_links,
         "documentMarkdown": document_markdown,
     }
+
+
+def _display_locations(entry: InventoryEntry) -> list[dict[str, str | None]]:
+    # Keep provenance sightings intact; show a physical location once per owner.
+    locations = []
+    seen = set()
+    for sighting in entry.detail_sightings():
+        if sighting.path is not None:
+            try:
+                path = sighting.path.resolve()
+            except (OSError, RuntimeError, ValueError):
+                path = sighting.path
+            key = (sighting.kind, sighting.harness, path)
+            if key in seen:
+                continue
+            seen.add(key)
+        locations.append(sighting_payload(sighting))
+    return locations
 
 
 def source_status_payload(update_status: str | None) -> dict[str, object]:
