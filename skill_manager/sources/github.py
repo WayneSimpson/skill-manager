@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import os
 from pathlib import Path
+import re
 import socket
 import subprocess
 import time
@@ -10,6 +12,8 @@ from typing import Callable
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
+
+from .artifacts import extract_source, read_public_bytes
 
 _CACHE_TTL_SECONDS = 900
 _TIMEOUT_SECONDS = 10
@@ -190,6 +194,29 @@ def _find_skill(clone_dir: Path, skill_dir: str) -> Path | None:
     return None
 
 
+def matching_skill_roots(clone_dir: Path, identifier: str) -> tuple[Path, ...]:
+    """Exact marketplace identifier matches, without the legacy first-match policy."""
+    matches = set()
+    for document in clone_dir.rglob('SKILL.md'):
+        if document.is_symlink() or not document.is_file() or document.stat().st_size > 1024 * 1024:
+            continue
+        if document.parent.name == identifier:
+            matches.add(document.parent)
+            continue
+        with document.open(encoding='utf-8') as stream:
+            content = stream.read(1024 * 1024 + 1)
+        lines = content.splitlines()
+        if lines[:1] != ['---']:
+            continue
+        for line in lines[1:]:
+            if line.strip() == '---':
+                break
+            if line.startswith('name:') and line.split(':', 1)[1].strip().strip("'\"") == identifier:
+                matches.add(document.parent)
+                break
+    return tuple(sorted(matches))
+
+
 def _normalize_relative_path(relative_path: str | None) -> str:
     if relative_path is None:
         return "."
@@ -198,6 +225,28 @@ def _normalize_relative_path(relative_path: str | None) -> str:
 
 
 class GitHubSource:
+    def acquire_repository(self, repo: str, work_dir: Path, *, ref: str | None = None) -> tuple[Path, str]:
+        """Fetch an immutable source snapshot without checkout filters or credentials."""
+        if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repo) or any(
+            part in {'.', '..'} for part in repo.split('/')
+        ):
+            raise ValueError('Invalid GitHub repository')
+        if ref is not None and (not ref or len(ref) > 200 or any(ord(c) < 33 for c in ref)):
+            raise ValueError('Invalid source ref')
+        payload = json.loads(read_public_bytes(
+            f'https://api.github.com/repos/{repo}/commits/{quote(ref or "HEAD", safe="")}',
+            limit=1024 * 1024,
+        ))
+        revision = payload.get('sha') if isinstance(payload, dict) else None
+        if not isinstance(revision, str) or not re.fullmatch(r'[0-9a-f]{40}', revision):
+            raise ValueError('Source revision unavailable')
+        if ref and re.fullmatch(r'[0-9a-f]{40}', ref) and revision != ref:
+            raise ValueError('Source revision mismatch')
+        data = read_public_bytes(f'https://codeload.github.com/{repo}/zip/{revision}')
+        root = work_dir / 'repository'
+        extract_source(data, root, kind='zip')
+        return root, revision
+
     def resolve(self, locator: str, work_dir: Path) -> ResolvedGitHubSkill:
         owner, repo_name, skill_dir = _parse_locator(locator)
         clone_dir = work_dir / f"{owner}--{repo_name}"
@@ -213,6 +262,7 @@ class GitHubSource:
             check=True,
             capture_output=True,
             timeout=60,
+            env={**os.environ, 'GIT_TERMINAL_PROMPT': '0', 'GIT_ASKPASS': 'true'},
         )
         skill_path = _find_skill(clone_dir, skill_dir)
         if skill_path is None:

@@ -51,8 +51,9 @@ class _RootParse:
 class SourcePackageDiscovery:
     """Read-only, bounded discovery of a package that owns a skill."""
 
-    def __init__(self, stop_paths: tuple[Path, ...] = ()) -> None:
+    def __init__(self, stop_paths: tuple[Path, ...] = (), *, boundary: Path | None = None) -> None:
         self._stop_paths = tuple(_resolve_boundary(path) for path in stop_paths)
+        self._boundary = boundary.resolve() if boundary is not None else None
         self._root_cache: dict[Path, _RootParse] = {}
 
     def resolve(self, skill_path: Path | None) -> dict[str, object]:
@@ -61,10 +62,26 @@ class SourcePackageDiscovery:
         except (OSError, RuntimeError, ValueError):
             return _unresolved("Source package changed or could not be read safely.")
 
+    def inspect_root(self, root: Path) -> dict[str, object]:
+        """Inspect an explicitly established source root, without ancestor inference."""
+        try:
+            root = root.resolve(strict=True)
+            if (not root.is_dir() or _under_any(root, self._stop_paths)
+                    or (self._boundary is not None and not root.is_relative_to(self._boundary))):
+                return _unresolved('Source root is outside the inspection boundary.')
+            parsed = self._parse_root(root, tuple(_manifest_candidates(root)))
+            package = self._build_package(parsed, None)
+            return ({'status': 'resolved', 'package': package, 'reason': None} if package
+                    else _unresolved('No validated package manifest at the source root.'))
+        except (OSError, RuntimeError, ValueError):
+            return _unresolved('Source root could not be read safely.')
+
     def _resolve(self, skill_path: Path | None) -> dict[str, object]:
         skill_dir, error = _source_skill_directory(skill_path, self._stop_paths)
         if skill_dir is None:
             return _unresolved(error or "Skill source is not readable")
+        if self._boundary is not None and not skill_dir.is_relative_to(self._boundary):
+            return _unresolved('Skill is outside the source boundary.')
 
         root, candidates, error = self._find_root(skill_dir)
         if root is None:
@@ -87,6 +104,8 @@ class SourcePackageDiscovery:
         current = skill_dir
         home = _resolve_boundary(Path.home())
         for _ in range(MAX_ANCESTORS + 1):
+            if self._boundary is not None and not current.is_relative_to(self._boundary):
+                break
             if current == home or _under_any(current, self._stop_paths) or current == Path(current.anchor):
                 break
             candidates = _manifest_candidates(current)
@@ -151,7 +170,7 @@ class SourcePackageDiscovery:
         return _RootParse(root, manifests, parsed, diagnostics)
 
     @staticmethod
-    def _build_package(parsed: _RootParse, skill_dir: Path) -> dict[str, object] | None:
+    def _build_package(parsed: _RootParse, skill_dir: Path | None) -> dict[str, object] | None:
         valid = [item for item in parsed.parsed if item.valid]
         if not valid:
             return None
@@ -160,7 +179,7 @@ class SourcePackageDiscovery:
             for item in valid
             for component in item.components
         )
-        if not _skill_is_declared(parsed.root, skill_dir, components):
+        if skill_dir is not None and not _skill_is_declared(parsed.root, skill_dir, components):
             return None
         selected = _select_identity(valid)
         root = str(parsed.root.resolve())

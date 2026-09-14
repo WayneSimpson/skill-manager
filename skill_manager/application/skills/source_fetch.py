@@ -18,6 +18,10 @@ class SourceFetchService:
     def __init__(self, *, github: GitHubSource | None = None) -> None:
         self._github = github or GitHubSource()
 
+    def acquire_repository(self, *, source_locator: str, work_dir: Path,
+                           ref: str | None = None) -> tuple[Path, str]:
+        return self._github.acquire_repository(source_locator.removeprefix('github:'), work_dir, ref=ref)
+
     def fetch_package(self, *, source_kind: str, source_locator: str, work_dir: Path) -> FetchedSourcePackage:
         try:
             if source_kind == "github":

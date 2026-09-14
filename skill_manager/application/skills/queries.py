@@ -15,6 +15,7 @@ from .presenters import skill_detail_payload, skills_page_payload, source_status
 from .read_models import SkillsReadModelService
 from .source_fetch import SourceFetchService
 from .source_package import SourcePackageDiscovery
+from .package_resolution import PackageResolution, PackageSourceResolver
 
 
 class SkillsQueryService:
@@ -64,6 +65,11 @@ class SkillsQueryService:
                 packages[package["id"]] = package
             skills.append({"skillRef": entry.skill_ref, "packageId": package["id"] if package else None, **result})
         return {"packages": list(packages.values()), "skills": skills}
+
+    def resolve_package_source(self, skill_ref: str, *, work_dir: Path) -> PackageResolution:
+        """Explicit upstream operation; ordinary inventory/detail reads remain local."""
+        resolver = PackageSourceResolver(self.source_fetcher, stop_paths=(self.read_models.store.root,))
+        return resolver.resolve(self.require_entry(skill_ref), work_dir=work_dir)
 
     def _package_discovery(self) -> SourcePackageDiscovery:
         # Fresh per request: source manifests can change outside the inventory cache.
