@@ -12,6 +12,7 @@ dist/
 packaging/npm/vendor/
 .artifacts/runtime/
 .artifacts/
+.playwright-mcp/
 task_plan.md
 findings.md
 progress.md

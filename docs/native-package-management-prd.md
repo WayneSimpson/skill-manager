@@ -181,31 +181,31 @@ If downstream work exposes a specific compatibility gap in 04A, that should be h
 
 The current programme is expected to progress broadly through:
 
-**01-04 - OpenCode discovery/configuration foundation**  
+**01-04 - OpenCode discovery/configuration foundation**
 Already completed.
 
-**04A - Package capability discovery**  
+**04A - Package capability discovery**
 Already implemented and in review.
 
-**04B - Upstream package source resolution and acquisition**  
+**04B - Upstream package source resolution and acquisition**
 Resolve trustworthy package provenance and obtain the authoritative package/version.
 
-**05 - Central managed package model**  
+**05 - Central managed package model**
 Manage the resolved package safely and durably.
 
-**06 - Native deployment strategy**  
+**06 - Native deployment strategy**
 Establish the correct native package mechanism for each target harness.
 
-**07 - Native package deployment**  
+**07 - Native package deployment**
 Implement the supported deployment mechanisms.
 
-**08 - Package-aware product experience**  
+**08 - Package-aware product experience**
 Expose package management and native deployment clearly in the UI.
 
-**09 - End-to-end verification**  
+**09 - End-to-end verification**
 Prove the complete workflow against real harness behaviour.
 
-**10 - Final documentation and support matrix**  
+**10 - Final documentation and support matrix**
 Document only the capabilities actually verified.
 
 This sequence expresses the programme direction only.
