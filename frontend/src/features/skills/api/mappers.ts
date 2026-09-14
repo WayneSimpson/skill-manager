@@ -23,6 +23,7 @@ export function mapSkillDetail(dto: SkillDetailDto): SkillDetail {
     harnessCells: dto.harnessCells,
     locations: dto.locations,
     sourceLinks: dto.sourceLinks,
+    sourcePackage: dto.sourcePackage,
     documentMarkdown: dto.documentMarkdown,
   };
 }

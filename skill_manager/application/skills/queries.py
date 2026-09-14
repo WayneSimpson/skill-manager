@@ -14,6 +14,7 @@ from .policy import can_stop_managing, can_update, has_local_changes
 from .presenters import skill_detail_payload, skills_page_payload, source_status_payload
 from .read_models import SkillsReadModelService
 from .source_fetch import SourceFetchService
+from .source_package import SourcePackageDiscovery
 
 
 class SkillsQueryService:
@@ -43,12 +44,60 @@ class SkillsQueryService:
         if entry is None:
             return None
         package_root = self.resolve_detail_package_root(entry)
-        return skill_detail_payload(
+        payload = skill_detail_payload(
             entry,
             columns=inventory.columns,
             document_markdown=read_skill_document_markdown(package_root) or entry.document_markdown,
             source_links=self.build_source_links(entry),
         )
+        payload["sourcePackage"] = self._source_package(entry, self._package_discovery())
+        return payload
+
+    def list_source_packages(self) -> dict[str, object]:
+        discovery = self._package_discovery()
+        packages = {}
+        skills = []
+        for entry in self.inventory().entries:
+            result = self._source_package(entry, discovery)
+            package = result.pop("package")
+            if package is not None:
+                packages[package["id"]] = package
+            skills.append({"skillRef": entry.skill_ref, "packageId": package["id"] if package else None, **result})
+        return {"packages": list(packages.values()), "skills": skills}
+
+    def _package_discovery(self) -> SourcePackageDiscovery:
+        # Fresh per request: source manifests can change outside the inventory cache.
+        return SourcePackageDiscovery(stop_paths=(self.read_models.store.root,))
+
+    @staticmethod
+    def _source_package(entry: InventoryEntry, discovery: SourcePackageDiscovery) -> dict[str, object]:
+        source_path: Path | None = None
+        reason = None
+        if entry.source.kind == "github":
+            reason = "Repository-relative skill provenance has no retained local source checkout."
+        elif entry.source_path is not None:
+            candidate = Path(entry.source_path)
+            if candidate.is_absolute():
+                source_path = candidate
+            else:
+                reason = "Relative source provenance does not establish a local source directory."
+        elif entry.kind == "unmanaged" and entry.source.kind != "runtime":
+            try:
+                candidates = {s.path.resolve() for s in entry.sightings if s.path is not None}
+                if len(candidates) == 1:
+                    source_path = candidates.pop()
+                elif candidates:
+                    reason = "Multiple source directories exist; no single source package is proven."
+            except (OSError, RuntimeError, ValueError):
+                reason = "Source directory cannot be resolved safely."
+        else:
+            reason = "No original file-backed skill source is available; package ownership is unresolved."
+        result = discovery.resolve(source_path) if source_path is not None else {
+            "status": "unresolved", "package": None, "reason": reason or "No readable skill source is available.",
+        }
+        return {**result, "sourceKind": entry.source.kind,
+                "sourcePath": str(source_path) if source_path is not None else None,
+                "sourceRevision": entry.current_revision}
 
     def get_skill_source_status(self, skill_ref: str) -> dict[str, object] | None:
         entry = self.inventory().find(skill_ref)

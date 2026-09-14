@@ -326,7 +326,8 @@ class SkillsMutationService:
                 source_kind=source_kind,
                 source_locator=source_locator,
                 origin_harness=origin_harness,
-                source_path_hint=entry.source_path,
+                # Keep the copied skill's origin, never a content-only temporary directory.
+                source_path_hint=entry.source_path or (str(source_path) if not entry.runtime_only else None),
             )
         except ValueError as error:
             raise MutationError(str(error), status=409) from error

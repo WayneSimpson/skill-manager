@@ -132,6 +132,59 @@ class SkillSourceLinksResponse(BaseModel):
     folderUrl: str | None
 
 
+PackageEvidence = Literal["declared_standard", "declared_harness_manifest", "verified_convention", "unresolved"]
+
+
+class PackageManifestResponse(BaseModel):
+    path: str
+    format: str
+    evidence: PackageEvidence
+
+
+class PackageComponentResponse(BaseModel):
+    kind: str
+    harness: str | None
+    path: str
+    evidence: PackageEvidence
+    manifest: str
+    supported: bool = Field(description="Only individual skill copying is supported; not package deployment.")
+    entries: list[str] = Field(default_factory=list, description="Declared MCP server or hook event names only; no configuration values.")
+
+
+class SourcePackageResponse(BaseModel):
+    id: str = Field(description="Stable identity of this resolved local package root, not a global repository ID.")
+    root: str
+    name: str
+    version: str | None
+    evidence: PackageEvidence
+    manifests: list[PackageManifestResponse]
+    components: list[PackageComponentResponse]
+    diagnostics: list[str]
+    revision: str = Field(description="Structural capability fingerprint, not a source commit or content hash.")
+
+
+class SkillPackageProvenanceResponse(BaseModel):
+    status: Literal["resolved", "unresolved"]
+    sourceKind: str
+    sourcePath: str | None
+    sourceRevision: str | None
+    reason: str | None
+
+
+class SkillSourcePackageResponse(SkillPackageProvenanceResponse):
+    package: SourcePackageResponse | None
+
+
+class SkillPackageLinkResponse(SkillPackageProvenanceResponse):
+    skillRef: str
+    packageId: str | None
+
+
+class SourcePackagesResponse(BaseModel):
+    packages: list[SourcePackageResponse]
+    skills: list[SkillPackageLinkResponse]
+
+
 class SkillDetailResponse(BaseModel):
     skillRef: str
     name: str
@@ -143,6 +196,7 @@ class SkillDetailResponse(BaseModel):
     locations: list[SkillLocationResponse]
     sourceLinks: SkillSourceLinksResponse | None
     documentMarkdown: str | None
+    sourcePackage: SkillSourcePackageResponse | None = None
 
 
 class SkillSourceStatusResponse(BaseModel):

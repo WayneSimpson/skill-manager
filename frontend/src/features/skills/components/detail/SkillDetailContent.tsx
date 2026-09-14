@@ -13,6 +13,7 @@ import type { StructuralSkillAction } from "../../model/pending";
 import type { HarnessCell, SkillDetail, SkillSourceLinks } from "../../model/types";
 import { SkillDetailHarnessMatrix } from "./SkillDetailHarnessMatrix";
 import { SkillDetailRemoveAction } from "./SkillDetailRemoveAction";
+import { SkillDetailSourcePackage } from "./SkillDetailSourcePackage";
 import { SkillDetailUpdateControl } from "./SkillDetailUpdateControl";
 import { SkillDetailShell } from "./SkillDetailShell";
 
@@ -130,6 +131,8 @@ export function SkillDetailContent({
             />
           </DetailSection>
         ) : null}
+
+        {detail.sourcePackage ? <SkillDetailSourcePackage sourcePackage={detail.sourcePackage} /> : null}
 
         {detail.locations.length > 0 ? (
           <DetailSection heading={copy.detail.locations}>

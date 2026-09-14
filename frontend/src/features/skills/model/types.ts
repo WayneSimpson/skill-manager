@@ -6,6 +6,7 @@ import type {
   SkillRowActionsDto,
   SkillLocation as SkillLocationDto,
   SkillSourceLinks as SkillSourceLinksDto,
+  SkillSourcePackage as SkillSourcePackageDto,
   SkillStatus as SkillStatusDto,
   SkillsSummary as SkillsSummaryDto,
   SkillDetailActionsDto,
@@ -24,6 +25,7 @@ export type HarnessCell = HarnessCellDto;
 export type SkillRowActions = SkillRowActionsDto;
 export type SkillLocation = SkillLocationDto;
 export type SkillSourceLinks = SkillSourceLinksDto;
+export type SkillSourcePackage = SkillSourcePackageDto;
 export type BulkManageResult = BulkManageResultDto;
 
 export interface SkillListRow {
@@ -55,5 +57,6 @@ export interface SkillDetail {
   harnessCells: HarnessCell[];
   locations: SkillLocation[];
   sourceLinks: SkillSourceLinks | null;
+  sourcePackage?: SkillSourcePackage | null;
   documentMarkdown: string | null;
 }

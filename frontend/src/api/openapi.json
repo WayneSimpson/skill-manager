@@ -2855,6 +2855,95 @@
         "title": "OpenCodeRuntimeSkillsStatusResponse",
         "type": "object"
       },
+      "PackageComponentResponse": {
+        "properties": {
+          "entries": {
+            "description": "Declared MCP server or hook event names only; no configuration values.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "evidence": {
+            "enum": [
+              "declared_standard",
+              "declared_harness_manifest",
+              "verified_convention",
+              "unresolved"
+            ],
+            "title": "Evidence",
+            "type": "string"
+          },
+          "harness": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "manifest": {
+            "title": "Manifest",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "supported": {
+            "description": "Only individual skill copying is supported; not package deployment.",
+            "title": "Supported",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "kind",
+          "harness",
+          "path",
+          "evidence",
+          "manifest",
+          "supported"
+        ],
+        "title": "PackageComponentResponse",
+        "type": "object"
+      },
+      "PackageManifestResponse": {
+        "properties": {
+          "evidence": {
+            "enum": [
+              "declared_standard",
+              "declared_harness_manifest",
+              "verified_convention",
+              "unresolved"
+            ],
+            "title": "Evidence",
+            "type": "string"
+          },
+          "format": {
+            "title": "Format",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "format",
+          "evidence"
+        ],
+        "title": "PackageManifestResponse",
+        "type": "object"
+      },
       "ReconcileMcpServerRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3849,6 +3938,16 @@
                 "type": "null"
               }
             ]
+          },
+          "sourcePackage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SkillSourcePackageResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -3958,6 +4057,81 @@
         "title": "SkillLocationResponse",
         "type": "object"
       },
+      "SkillPackageLinkResponse": {
+        "properties": {
+          "packageId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Packageid"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "skillRef": {
+            "title": "Skillref",
+            "type": "string"
+          },
+          "sourceKind": {
+            "title": "Sourcekind",
+            "type": "string"
+          },
+          "sourcePath": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sourcepath"
+          },
+          "sourceRevision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sourcerevision"
+          },
+          "status": {
+            "enum": [
+              "resolved",
+              "unresolved"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "sourceKind",
+          "sourcePath",
+          "sourceRevision",
+          "reason",
+          "skillRef",
+          "packageId"
+        ],
+        "title": "SkillPackageLinkResponse",
+        "type": "object"
+      },
       "SkillRowActionsResponse": {
         "properties": {
           "canDelete": {
@@ -4020,6 +4194,75 @@
           "folderUrl"
         ],
         "title": "SkillSourceLinksResponse",
+        "type": "object"
+      },
+      "SkillSourcePackageResponse": {
+        "properties": {
+          "package": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SourcePackageResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "sourceKind": {
+            "title": "Sourcekind",
+            "type": "string"
+          },
+          "sourcePath": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sourcepath"
+          },
+          "sourceRevision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sourcerevision"
+          },
+          "status": {
+            "enum": [
+              "resolved",
+              "unresolved"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "sourceKind",
+          "sourcePath",
+          "sourceRevision",
+          "reason",
+          "package"
+        ],
+        "title": "SkillSourcePackageResponse",
         "type": "object"
       },
       "SkillSourceStatusResponse": {
@@ -4690,6 +4933,107 @@
           "available"
         ],
         "title": "SlashTargetResponse",
+        "type": "object"
+      },
+      "SourcePackageResponse": {
+        "properties": {
+          "components": {
+            "items": {
+              "$ref": "#/components/schemas/PackageComponentResponse"
+            },
+            "title": "Components",
+            "type": "array"
+          },
+          "diagnostics": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Diagnostics",
+            "type": "array"
+          },
+          "evidence": {
+            "enum": [
+              "declared_standard",
+              "declared_harness_manifest",
+              "verified_convention",
+              "unresolved"
+            ],
+            "title": "Evidence",
+            "type": "string"
+          },
+          "id": {
+            "description": "Stable identity of this resolved local package root, not a global repository ID.",
+            "title": "Id",
+            "type": "string"
+          },
+          "manifests": {
+            "items": {
+              "$ref": "#/components/schemas/PackageManifestResponse"
+            },
+            "title": "Manifests",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "revision": {
+            "description": "Structural capability fingerprint, not a source commit or content hash.",
+            "title": "Revision",
+            "type": "string"
+          },
+          "root": {
+            "title": "Root",
+            "type": "string"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "id",
+          "root",
+          "name",
+          "version",
+          "evidence",
+          "manifests",
+          "components",
+          "diagnostics",
+          "revision"
+        ],
+        "title": "SourcePackageResponse",
+        "type": "object"
+      },
+      "SourcePackagesResponse": {
+        "properties": {
+          "packages": {
+            "items": {
+              "$ref": "#/components/schemas/SourcePackageResponse"
+            },
+            "title": "Packages",
+            "type": "array"
+          },
+          "skills": {
+            "items": {
+              "$ref": "#/components/schemas/SkillPackageLinkResponse"
+            },
+            "title": "Skills",
+            "type": "array"
+          }
+        },
+        "required": [
+          "packages",
+          "skills"
+        ],
+        "title": "SourcePackagesResponse",
         "type": "object"
       },
       "ValidationError": {
@@ -6293,6 +6637,24 @@
           }
         },
         "summary": "Manage All Skills"
+      }
+    },
+    "/api/skills/source-packages": {
+      "get": {
+        "operationId": "list_source_packages_api_skills_source_packages_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourcePackagesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Source Packages"
       }
     },
     "/api/skills/{skill_ref}": {

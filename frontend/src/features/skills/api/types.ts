@@ -22,6 +22,7 @@ export type SkillDetailActionsDto = components["schemas"]["SkillDetailActionsRes
 export type SkillSourceStatusDto = components["schemas"]["SkillSourceStatusResponse"];
 export type SkillLocation = components["schemas"]["SkillLocationResponse"];
 export type SkillSourceLinks = components["schemas"]["SkillSourceLinksResponse"];
+export type SkillSourcePackage = components["schemas"]["SkillSourcePackageResponse"];
 export type SkillDetailDto = components["schemas"]["SkillDetailResponse"];
 export type BulkManageFailure = components["schemas"]["BulkManageFailureResponse"];
 export type BulkManageResult = components["schemas"]["BulkManageResultResponse"];

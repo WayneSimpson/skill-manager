@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from skill_manager.application import BackendContainer
 from skill_manager.api.deps import get_container
+from skill_manager.api.schemas.skills import SourcePackagesResponse
 from skill_manager.api.schemas import (
     BulkManageResultResponse,
     DisableSkillRequest,
@@ -22,6 +23,11 @@ router = APIRouter(prefix="/api/skills")
 @router.get("", response_model=SkillsPageResponse)
 def list_skills(container: BackendContainer = Depends(get_container)) -> dict[str, object]:
     return container.skills_queries.list_skills()
+
+
+@router.get("/source-packages", response_model=SourcePackagesResponse)
+def list_source_packages(container: BackendContainer = Depends(get_container)) -> dict[str, object]:
+    return container.skills_queries.list_source_packages()
 
 
 @router.get("/{skill_ref:path}/source-status", response_model=SkillSourceStatusResponse)

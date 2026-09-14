@@ -620,6 +620,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/skills/source-packages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Source Packages */
+        get: operations["list_source_packages_api_skills_source_packages_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/skills/{skill_ref}": {
         parameters: {
             query?: never;
@@ -1755,6 +1772,44 @@ export interface components {
              */
             status: "disconnected" | "ready" | "error";
         };
+        /** PackageComponentResponse */
+        PackageComponentResponse: {
+            /**
+             * Entries
+             * @description Declared MCP server or hook event names only; no configuration values.
+             */
+            entries?: string[];
+            /**
+             * Evidence
+             * @enum {string}
+             */
+            evidence: "declared_standard" | "declared_harness_manifest" | "verified_convention" | "unresolved";
+            /** Harness */
+            harness: string | null;
+            /** Kind */
+            kind: string;
+            /** Manifest */
+            manifest: string;
+            /** Path */
+            path: string;
+            /**
+             * Supported
+             * @description Only individual skill copying is supported; not package deployment.
+             */
+            supported: boolean;
+        };
+        /** PackageManifestResponse */
+        PackageManifestResponse: {
+            /**
+             * Evidence
+             * @enum {string}
+             */
+            evidence: "declared_standard" | "declared_harness_manifest" | "verified_convention" | "unresolved";
+            /** Format */
+            format: string;
+            /** Path */
+            path: string;
+        };
         /** ReconcileMcpServerRequest */
         ReconcileMcpServerRequest: {
             /** Harnesses */
@@ -2131,6 +2186,7 @@ export interface components {
             /** Skillref */
             skillRef: string;
             sourceLinks: components["schemas"]["SkillSourceLinksResponse"] | null;
+            sourcePackage?: components["schemas"]["SkillSourcePackageResponse"] | null;
         };
         /** SkillLocationResponse */
         SkillLocationResponse: {
@@ -2156,6 +2212,26 @@ export interface components {
             /** Sourcelocator */
             sourceLocator: string;
         };
+        /** SkillPackageLinkResponse */
+        SkillPackageLinkResponse: {
+            /** Packageid */
+            packageId: string | null;
+            /** Reason */
+            reason: string | null;
+            /** Skillref */
+            skillRef: string;
+            /** Sourcekind */
+            sourceKind: string;
+            /** Sourcepath */
+            sourcePath: string | null;
+            /** Sourcerevision */
+            sourceRevision: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "resolved" | "unresolved";
+        };
         /** SkillRowActionsResponse */
         SkillRowActionsResponse: {
             /** Candelete */
@@ -2175,6 +2251,23 @@ export interface components {
             repoLabel: string;
             /** Repourl */
             repoUrl: string;
+        };
+        /** SkillSourcePackageResponse */
+        SkillSourcePackageResponse: {
+            package: components["schemas"]["SourcePackageResponse"] | null;
+            /** Reason */
+            reason: string | null;
+            /** Sourcekind */
+            sourceKind: string;
+            /** Sourcepath */
+            sourcePath: string | null;
+            /** Sourcerevision */
+            sourceRevision: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "resolved" | "unresolved";
         };
         /** SkillSourceStatusResponse */
         SkillSourceStatusResponse: {
@@ -2393,6 +2486,43 @@ export interface components {
             supportNote?: string | null;
             /** Supportsfrontmatter */
             supportsFrontmatter: boolean;
+        };
+        /** SourcePackageResponse */
+        SourcePackageResponse: {
+            /** Components */
+            components: components["schemas"]["PackageComponentResponse"][];
+            /** Diagnostics */
+            diagnostics: string[];
+            /**
+             * Evidence
+             * @enum {string}
+             */
+            evidence: "declared_standard" | "declared_harness_manifest" | "verified_convention" | "unresolved";
+            /**
+             * Id
+             * @description Stable identity of this resolved local package root, not a global repository ID.
+             */
+            id: string;
+            /** Manifests */
+            manifests: components["schemas"]["PackageManifestResponse"][];
+            /** Name */
+            name: string;
+            /**
+             * Revision
+             * @description Structural capability fingerprint, not a source commit or content hash.
+             */
+            revision: string;
+            /** Root */
+            root: string;
+            /** Version */
+            version: string | null;
+        };
+        /** SourcePackagesResponse */
+        SourcePackagesResponse: {
+            /** Packages */
+            packages: components["schemas"]["SourcePackageResponse"][];
+            /** Skills */
+            skills: components["schemas"]["SkillPackageLinkResponse"][];
         };
         /** ValidationError */
         ValidationError: {
@@ -3586,6 +3716,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BulkManageResultResponse"];
+                };
+            };
+        };
+    };
+    list_source_packages_api_skills_source_packages_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourcePackagesResponse"];
                 };
             };
         };
