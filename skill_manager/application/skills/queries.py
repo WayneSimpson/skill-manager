@@ -19,6 +19,7 @@ from .package_resolution import PackageResolution, PackageSourceResolver
 from .package_resolution import PackageSource
 from .identity import SourceDescriptor
 from .managed_packages import ManagedPackageStore
+from .package_deployment import NativeTarget, PackageDeploymentPlan, PackageDeploymentPlanner
 
 
 class SkillsQueryService:
@@ -33,6 +34,9 @@ class SkillsQueryService:
 
     def list_managed_packages(self) -> dict[str, object]:
         return {'packages': self.managed_packages.list(), 'skills': self.managed_packages.links()}
+
+    def plan_managed_package(self, package_id: str, target: NativeTarget) -> PackageDeploymentPlan:
+        return PackageDeploymentPlanner(self.managed_packages).plan(package_id, target)
 
     def refresh_managed_package(self, package_id: str) -> dict:
         record = self.managed_packages.get(package_id)
