@@ -98,6 +98,7 @@ class SandboxRunner:
                     try:
                         replies, pending = [], b''
                         for request in requests:
+                            request_id = request['request_id'] if harness == 'claude' else request['id']
                             process.stdin.write((json.dumps(request) + '\n').encode())
                             process.stdin.flush()
                             deadline = time.monotonic() + 30
@@ -112,7 +113,10 @@ class SandboxRunner:
                                 while b'\n' in pending:
                                     line, pending = pending.split(b'\n', 1)
                                     reply = json.loads(line)
-                                    if reply.get('id') == request['id']:
+                                    # Claude SDK control frames nest their response ID; Codex uses JSON-RPC.
+                                    reply_id = (reply.get('response', {}).get('request_id')
+                                                if harness == 'claude' else reply.get('id'))
+                                    if reply_id == request_id:
                                         replies.append(reply)
                                         complete = True
                         return replies
