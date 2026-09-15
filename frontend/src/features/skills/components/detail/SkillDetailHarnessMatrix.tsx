@@ -13,6 +13,8 @@ interface SkillDetailHarnessMatrixProps {
   pendingToggleHarnesses: ReadonlySet<string>;
   pendingStructuralAction: StructuralSkillAction | null;
   onToggleCell: (cell: HarnessCell) => void;
+  individualControlsDisabled?: boolean;
+  individualControlsHint?: string;
 }
 
 const STATE_LABEL: Record<HarnessCellState, string> = {
@@ -39,6 +41,8 @@ export function SkillDetailHarnessMatrix({
   pendingToggleHarnesses,
   pendingStructuralAction,
   onToggleCell,
+  individualControlsDisabled = false,
+  individualControlsHint,
 }: SkillDetailHarnessMatrixProps) {
   if (cells.length === 0) {
     return null;
@@ -70,6 +74,8 @@ export function SkillDetailHarnessMatrix({
                 cell={cell}
                 pending={pending}
                 disabled={structuralLocked}
+                individualControlsDisabled={individualControlsDisabled}
+                individualControlsHint={individualControlsHint}
                 onToggleCell={onToggleCell}
               />
             </div>
@@ -85,6 +91,8 @@ interface HarnessCellActionProps {
   cell: HarnessCell;
   pending: boolean;
   disabled: boolean;
+  individualControlsDisabled: boolean;
+  individualControlsHint?: string;
   onToggleCell: (cell: HarnessCell) => void;
 }
 
@@ -93,17 +101,25 @@ function HarnessCellAction({
   cell,
   pending,
   disabled,
+  individualControlsDisabled,
+  individualControlsHint,
   onToggleCell,
 }: HarnessCellActionProps) {
   if (!cell.interactive) {
     if (cell.state === "found") {
       return (
         <span className="detail-sheet__binding-hint">
-          Adopt this skill to manage it
+          {individualControlsHint ?? "Adopt this skill to manage it"}
         </span>
       );
     }
     return null;
+  }
+
+  if (individualControlsDisabled) {
+    return individualControlsHint ? (
+      <span className="detail-sheet__binding-hint">{individualControlsHint}</span>
+    ) : null;
   }
 
   if (cell.state === "enabled") {

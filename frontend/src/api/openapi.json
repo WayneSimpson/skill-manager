@@ -3208,6 +3208,212 @@
         "title": "PackageComponentResponse",
         "type": "object"
       },
+      "PackageDeploymentActionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "deploy",
+              "enable",
+              "disable",
+              "remove",
+              "update"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "replacementPackageId": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 64,
+                "pattern": "[0-9a-f]{64}",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replacementpackageid"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "PackageDeploymentActionRequest",
+        "type": "object"
+      },
+      "PackageDeploymentHarnessResponse": {
+        "properties": {
+          "actions": {
+            "items": {
+              "enum": [
+                "deploy",
+                "enable",
+                "disable",
+                "remove",
+                "update"
+              ],
+              "type": "string"
+            },
+            "title": "Actions",
+            "type": "array"
+          },
+          "blockers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blockers",
+            "type": "array"
+          },
+          "deploymentId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deploymentid"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "harness": {
+            "enum": [
+              "claude",
+              "codex",
+              "cursor",
+              "opencode"
+            ],
+            "title": "Harness",
+            "type": "string"
+          },
+          "ownership": {
+            "enum": [
+              "absent",
+              "managed",
+              "external-existing",
+              "conflict"
+            ],
+            "title": "Ownership",
+            "type": "string"
+          },
+          "preflight": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Preflight",
+            "type": "array"
+          },
+          "replacementOptions": {
+            "items": {
+              "$ref": "#/components/schemas/PackageReplacementOption"
+            },
+            "title": "Replacementoptions",
+            "type": "array"
+          },
+          "selectedPackageId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selectedpackageid"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PackageSource"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state": {
+            "enum": [
+              "absent",
+              "installed",
+              "enabled",
+              "disabled",
+              "stale",
+              "conflict",
+              "external-existing",
+              "manual",
+              "unsupported"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "strategy": {
+            "enum": [
+              "native-local",
+              "native-install",
+              "manual/unsupported"
+            ],
+            "title": "Strategy",
+            "type": "string"
+          },
+          "support": {
+            "enum": [
+              "supported",
+              "manual",
+              "unsupported"
+            ],
+            "title": "Support",
+            "type": "string"
+          }
+        },
+        "required": [
+          "harness",
+          "state",
+          "support",
+          "ownership",
+          "strategy",
+          "selectedPackageId",
+          "deploymentId",
+          "enabled",
+          "blockers",
+          "actions",
+          "preflight"
+        ],
+        "title": "PackageDeploymentHarnessResponse",
+        "type": "object"
+      },
+      "PackageDeploymentsResponse": {
+        "properties": {
+          "harnesses": {
+            "items": {
+              "$ref": "#/components/schemas/PackageDeploymentHarnessResponse"
+            },
+            "title": "Harnesses",
+            "type": "array"
+          },
+          "packageId": {
+            "title": "Packageid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "packageId",
+          "harnesses"
+        ],
+        "title": "PackageDeploymentsResponse",
+        "type": "object"
+      },
       "PackageExternalObservation": {
         "properties": {
           "harness": {
@@ -3289,6 +3495,92 @@
           "evidence"
         ],
         "title": "PackageManifestResponse",
+        "type": "object"
+      },
+      "PackageReplacementOption": {
+        "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "packageId": {
+            "title": "Packageid",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/PackageSource"
+          }
+        },
+        "required": [
+          "packageId",
+          "source"
+        ],
+        "title": "PackageReplacementOption",
+        "type": "object"
+      },
+      "PackageResolutionResponse": {
+        "properties": {
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/SourceEvidence"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PackageSource"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "resolved",
+              "unresolved",
+              "ambiguous",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "source",
+          "reason",
+          "limitations",
+          "evidence"
+        ],
+        "title": "PackageResolutionResponse",
         "type": "object"
       },
       "PackageSource": {
@@ -4566,6 +4858,52 @@
           "detail"
         ],
         "title": "SkillLocationResponse",
+        "type": "object"
+      },
+      "SkillPackageContextResponse": {
+        "properties": {
+          "managedPackage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManagedPackageResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "observation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SkillSourcePackageResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "packageBacked": {
+            "title": "Packagebacked",
+            "type": "boolean"
+          },
+          "resolution": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PackageResolutionResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "packageBacked",
+          "observation",
+          "resolution",
+          "managedPackage"
+        ],
+        "title": "SkillPackageContextResponse",
         "type": "object"
       },
       "SkillPackageLinkResponse": {
@@ -7190,6 +7528,103 @@
         "summary": "List Managed Packages"
       }
     },
+    "/api/skills/managed-packages/{package_id}/deployments": {
+      "get": {
+        "operationId": "get_package_deployments_api_skills_managed_packages__package_id__deployments_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "package_id",
+            "required": true,
+            "schema": {
+              "title": "Package Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackageDeploymentsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Package Deployments"
+      }
+    },
+    "/api/skills/managed-packages/{package_id}/deployments/{harness}": {
+      "post": {
+        "operationId": "mutate_package_deployment_api_skills_managed_packages__package_id__deployments__harness__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "package_id",
+            "required": true,
+            "schema": {
+              "title": "Package Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "harness",
+            "required": true,
+            "schema": {
+              "title": "Harness",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PackageDeploymentActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackageDeploymentsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Mutate Package Deployment"
+      }
+    },
     "/api/skills/managed-packages/{package_id}/refresh": {
       "post": {
         "operationId": "refresh_managed_package_api_skills_managed_packages__package_id__refresh_post",
@@ -7499,6 +7934,84 @@
           }
         },
         "summary": "Manage Source Package"
+      }
+    },
+    "/api/skills/{skill_ref}/package-context": {
+      "get": {
+        "operationId": "get_package_context_api_skills__skill_ref__package_context_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "skill_ref",
+            "required": true,
+            "schema": {
+              "title": "Skill Ref",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillPackageContextResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Package Context"
+      }
+    },
+    "/api/skills/{skill_ref}/resolve-package": {
+      "post": {
+        "operationId": "resolve_package_context_api_skills__skill_ref__resolve_package_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "skill_ref",
+            "required": true,
+            "schema": {
+              "title": "Skill Ref",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillPackageContextResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resolve Package Context"
       }
     },
     "/api/skills/{skill_ref}/set-harnesses": {

@@ -67,6 +67,10 @@ from .skills import (
     HarnessCellState,
     HarnessColumnResponse,
     InstallMarketplaceSkillRequest,
+    PackageDeploymentActionRequest,
+    PackageDeploymentHarnessResponse,
+    PackageDeploymentsResponse,
+    PackageResolutionResponse,
     SetSkillHarnessesFailureResponse,
     SetSkillHarnessesRequest,
     SetSkillHarnessesResultResponse,
@@ -82,6 +86,7 @@ from .skills import (
     SkillUpdateStatus,
     SkillsPageResponse,
     SkillsSummaryResponse,
+    SkillPackageContextResponse,
 )
 from .settings import SettingsHarnessResponse, SettingsResponse, SettingsStorageResponse
 from .slash_commands import (
@@ -116,6 +121,10 @@ __all__ = [
     "HarnessColumnResponse",
     "HarnessTarget",
     "InstallMarketplaceSkillRequest",
+    "PackageDeploymentActionRequest",
+    "PackageDeploymentHarnessResponse",
+    "PackageDeploymentsResponse",
+    "PackageResolutionResponse",
     "MarketplaceInstallationResponse",
     "MarketplaceSkillDetailResponse",
     "MarketplaceSkillDocumentResponse",
@@ -181,6 +190,7 @@ __all__ = [
     "SkillUpdateStatus",
     "SkillsPageResponse",
     "SkillsSummaryResponse",
+    "SkillPackageContextResponse",
     "SlashCommandDeleteResponse",
     "SlashCommandImportRequest",
     "SlashCommandListResponse",

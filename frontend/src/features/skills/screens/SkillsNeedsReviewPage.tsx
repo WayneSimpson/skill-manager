@@ -26,6 +26,7 @@ export default function SkillsNeedsReviewPage() {
     selectedSkillRef,
     onManageAll,
     onManageSkill,
+    onManagePackage,
     onOpenSkill,
     isInitialLoading,
   } = useSkillsWorkspace();
@@ -85,6 +86,7 @@ export default function SkillsNeedsReviewPage() {
             selectedSkillRef={selectedSkillRef}
             onOpenSkill={onOpenSkill}
             onManageSkill={onManageSkill}
+            onManagePackage={onManagePackage}
           />
         ) : needsReviewCount > 0 ? (
           <SkillsEmptyState copy={copy.filters} onResetFilters={resetFilters} />

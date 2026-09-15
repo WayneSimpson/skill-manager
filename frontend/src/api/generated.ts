@@ -637,6 +637,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/skills/managed-packages/{package_id}/deployments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Package Deployments */
+        get: operations["get_package_deployments_api_skills_managed_packages__package_id__deployments_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/skills/managed-packages/{package_id}/deployments/{harness}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mutate Package Deployment */
+        post: operations["mutate_package_deployment_api_skills_managed_packages__package_id__deployments__harness__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/skills/managed-packages/{package_id}/refresh": {
         parameters: {
             query?: never;
@@ -767,6 +801,40 @@ export interface paths {
         put?: never;
         /** Manage Source Package */
         post: operations["manage_source_package_api_skills__skill_ref__manage_package_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/skills/{skill_ref}/package-context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Package Context */
+        get: operations["get_package_context_api_skills__skill_ref__package_context_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/skills/{skill_ref}/resolve-package": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resolve Package Context */
+        post: operations["resolve_package_context_api_skills__skill_ref__resolve_package_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1935,6 +2003,66 @@ export interface components {
              */
             supported: boolean;
         };
+        /** PackageDeploymentActionRequest */
+        PackageDeploymentActionRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "deploy" | "enable" | "disable" | "remove" | "update";
+            /** Replacementpackageid */
+            replacementPackageId?: string | null;
+        };
+        /** PackageDeploymentHarnessResponse */
+        PackageDeploymentHarnessResponse: {
+            /** Actions */
+            actions: ("deploy" | "enable" | "disable" | "remove" | "update")[];
+            /** Blockers */
+            blockers: string[];
+            /** Deploymentid */
+            deploymentId: string | null;
+            /** Enabled */
+            enabled: boolean | null;
+            /**
+             * Harness
+             * @enum {string}
+             */
+            harness: "claude" | "codex" | "cursor" | "opencode";
+            /**
+             * Ownership
+             * @enum {string}
+             */
+            ownership: "absent" | "managed" | "external-existing" | "conflict";
+            /** Preflight */
+            preflight: string[];
+            /** Replacementoptions */
+            replacementOptions?: components["schemas"]["PackageReplacementOption"][];
+            /** Selectedpackageid */
+            selectedPackageId: string | null;
+            source?: components["schemas"]["PackageSource"] | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "absent" | "installed" | "enabled" | "disabled" | "stale" | "conflict" | "external-existing" | "manual" | "unsupported";
+            /**
+             * Strategy
+             * @enum {string}
+             */
+            strategy: "native-local" | "native-install" | "manual/unsupported";
+            /**
+             * Support
+             * @enum {string}
+             */
+            support: "supported" | "manual" | "unsupported";
+        };
+        /** PackageDeploymentsResponse */
+        PackageDeploymentsResponse: {
+            /** Harnesses */
+            harnesses: components["schemas"]["PackageDeploymentHarnessResponse"][];
+            /** Packageid */
+            packageId: string;
+        };
         /** PackageExternalObservation */
         PackageExternalObservation: {
             /** Harness */
@@ -1960,6 +2088,29 @@ export interface components {
             format: string;
             /** Path */
             path: string;
+        };
+        /** PackageReplacementOption */
+        PackageReplacementOption: {
+            /** Label */
+            label?: string | null;
+            /** Packageid */
+            packageId: string;
+            source: components["schemas"]["PackageSource"];
+        };
+        /** PackageResolutionResponse */
+        PackageResolutionResponse: {
+            /** Evidence */
+            evidence: components["schemas"]["SourceEvidence"][];
+            /** Limitations */
+            limitations: string[];
+            /** Reason */
+            reason: string | null;
+            source: components["schemas"]["PackageSource"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "resolved" | "unresolved" | "ambiguous" | "unavailable";
         };
         /** PackageSource */
         PackageSource: {
@@ -2406,6 +2557,14 @@ export interface components {
             sourceKind: string;
             /** Sourcelocator */
             sourceLocator: string;
+        };
+        /** SkillPackageContextResponse */
+        SkillPackageContextResponse: {
+            managedPackage: components["schemas"]["ManagedPackageResponse"] | null;
+            observation: components["schemas"]["SkillSourcePackageResponse"] | null;
+            /** Packagebacked */
+            packageBacked: boolean;
+            resolution: components["schemas"]["PackageResolutionResponse"] | null;
         };
         /** SkillPackageLinkResponse */
         SkillPackageLinkResponse: {
@@ -3943,6 +4102,73 @@ export interface operations {
             };
         };
     };
+    get_package_deployments_api_skills_managed_packages__package_id__deployments_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                package_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PackageDeploymentsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mutate_package_deployment_api_skills_managed_packages__package_id__deployments__harness__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                package_id: string;
+                harness: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PackageDeploymentActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PackageDeploymentsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     refresh_managed_package_api_skills_managed_packages__package_id__refresh_post: {
         parameters: {
             query?: never;
@@ -4175,6 +4401,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ManagedPackageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_package_context_api_skills__skill_ref__package_context_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                skill_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkillPackageContextResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resolve_package_context_api_skills__skill_ref__resolve_package_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                skill_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkillPackageContextResponse"];
                 };
             };
             /** @description Validation Error */

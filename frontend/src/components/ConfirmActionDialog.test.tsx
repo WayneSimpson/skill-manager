@@ -59,4 +59,13 @@ describe("ConfirmActionDialog", () => {
     expect(screen.getByRole("button", { name: /cancel/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /uninstalling/i })).toBeDisabled();
   });
+
+  it("can keep confirmation disabled without trapping the user in the dialog", () => {
+    const { onOpenChange } = renderDialog({ confirmDisabled: true });
+
+    expect(screen.getByRole("button", { name: /uninstall/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /cancel/i })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
 });

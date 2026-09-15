@@ -17,6 +17,8 @@ interface SkillDetailViewProps {
   pendingStructuralAction: StructuralSkillAction | null;
   onClose: () => void;
   onManageSkill: (skillRef: string) => Promise<void>;
+  onManagePackage: (skillRef: string) => Promise<void>;
+  onResolvePackage: (skillRef: string) => Promise<void>;
   onToggleSkill: (skillRef: string, harness: string, currentState: HarnessCellState) => Promise<void>;
   onUpdateSkill: (skillRef: string) => Promise<void>;
   onRemoveSkill: (skillRef: string) => Promise<void>;
@@ -29,6 +31,8 @@ export function SkillDetailView({
   pendingStructuralAction,
   onClose,
   onManageSkill,
+  onManagePackage,
+  onResolvePackage,
   onToggleSkill,
   onUpdateSkill,
   onRemoveSkill,
@@ -37,14 +41,20 @@ export function SkillDetailView({
   const fallbackHeadingId = useId();
   const copy = useSkillsCopy();
   const {
-      detail,
-      isInitialLoading,
-      queryErrorMessage,
-      actionErrorMessage,
-      isRemoveDialogOpen,
-      isDeleteDialogOpen,
-      dismissActionError,
+    detail,
+    packageContext,
+    isPackageContextLoading,
+    packageContextErrorMessage,
+    retryPackageContext,
+    isInitialLoading,
+    queryErrorMessage,
+    actionErrorMessage,
+    isRemoveDialogOpen,
+    isDeleteDialogOpen,
+    dismissActionError,
     onManage,
+    onManagePackage: handleManagePackage,
+    onResolvePackage: handleResolvePackage,
     onToggleHarness,
     onUpdate,
     requestRemove,
@@ -55,6 +65,8 @@ export function SkillDetailView({
     handleConfirmRemove,
   } = useSkillDetailController(skillRef, {
     onManageSkill,
+    onManagePackage,
+    onResolvePackage,
     onToggleSkill,
     onUpdateSkill,
     onRemoveSkill,
@@ -96,6 +108,10 @@ export function SkillDetailView({
     <>
       <SkillDetailContent
         detail={detail}
+        packageContext={packageContext}
+        isPackageContextLoading={isPackageContextLoading}
+        packageContextErrorMessage={packageContextErrorMessage}
+        onRetryPackageContext={retryPackageContext}
         actionErrorMessage={actionErrorMessage}
         queryErrorMessage={queryErrorMessage}
         pendingToggleHarnesses={pendingToggleHarnesses}
@@ -103,6 +119,8 @@ export function SkillDetailView({
         onClose={onClose}
         onDismissActionError={dismissActionError}
         onManage={onManage}
+        onManagePackage={handleManagePackage}
+        onResolvePackage={handleResolvePackage}
         onToggleHarness={(cell) => onToggleHarness(cell.harness, cell.state)}
         onUpdate={onUpdate}
         onRequestRemove={requestRemove}

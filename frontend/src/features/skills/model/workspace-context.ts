@@ -32,6 +32,7 @@ export interface SkillsWorkspaceContextValue {
   multiSelectPending: MultiSelectAction | null;
   onManageAll: () => void;
   onManageSkill: (skillRef: string) => Promise<void>;
+  onManagePackage: (skillRef: string) => Promise<void>;
   onOpenSkill: (skillRef: string) => void;
   onToggleCell: (row: SkillListRow, cell: HarnessCell) => void;
   onToggleMultiSelect: (skillRef: string) => void;

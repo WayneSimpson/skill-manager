@@ -2,6 +2,7 @@ import { NeedsReviewRow } from "../../../../components/cards/NeedsReviewRow";
 import { UiTooltip } from "../../../../components/ui/UiTooltip";
 import { getHarnessPresentation } from "../../../../components/harness/harnessPresentation";
 import { useSkillsCopy } from "../../i18n";
+import { useSkillPackageContextQuery } from "../../api/queries";
 import type { StructuralSkillAction } from "../../model/pending";
 import type { HarnessCell, SkillListRow } from "../../model/types";
 
@@ -12,6 +13,7 @@ interface SkillNeedsReviewCardProps {
   selected: boolean;
   onOpenSkill: (skillRef: string) => void;
   onManageSkill: (skillRef: string) => Promise<void>;
+  onManagePackage?: (skillRef: string) => Promise<void>;
 }
 
 function HarnessLogo({ cell, zIndex }: { cell: HarnessCell; zIndex: number }) {
@@ -36,11 +38,30 @@ export function SkillNeedsReviewCard({
   selected: _selected,
   onOpenSkill,
   onManageSkill,
+  onManagePackage,
 }: SkillNeedsReviewCardProps) {
   const copy = useSkillsCopy();
+  const packageContextQuery = useSkillPackageContextQuery(row.skillRef);
   const found = row.cells.filter((cell) => cell.state === "found");
   const managing = pendingStructuralAction === "manage";
+  const packageContext = packageContextQuery.data;
+  const packageBacked = packageContext?.packageBacked === true;
+  const packageManaged = packageBacked && Boolean(packageContext.managedPackage);
+  const packageReady = packageBacked && packageContext.resolution?.status === "resolved" && !packageManaged;
+  const packageNeedsReview = packageBacked && !packageManaged && !packageReady;
+  const checkingPackage = (packageContextQuery.isPending || packageContextQuery.isFetching) && !packageContextQuery.isError;
+  const packageContextFailed = packageContextQuery.isError;
+  const canManagePackage = packageReady && typeof onManagePackage === "function";
   const metaText = `Found in ${found.length} harness${found.length === 1 ? "" : "es"}`;
+  const actionLabel = checkingPackage
+    ? copy.detail.checkingPackage
+    : packageContextFailed
+      ? copy.detail.reviewPackageSource
+    : packageReady
+      ? copy.detail.managePackage
+      : packageNeedsReview
+        ? copy.detail.reviewPackageSource
+        : copy.detail.adopt;
 
   return (
     <NeedsReviewRow
@@ -54,9 +75,15 @@ export function SkillNeedsReviewCard({
       }
       metaText={metaText}
       description={row.description}
-      actionLabel="Adopt"
+      actionLabel={actionLabel}
       actionTitle={
-        row.actions.canManage
+        packageContextFailed
+          ? copy.detail.packageContextUnavailable
+          : packageReady
+          ? copy.detail.packageManagement.managePackageTitle
+          : packageNeedsReview
+            ? copy.detail.packageManagement.reviewPackageSourceTitle
+            : row.actions.canManage
           ? "Add this skill to Skill Manager"
           : row.actions.canManageReason ?? "This skill cannot be adopted automatically"
       }
@@ -66,9 +93,23 @@ export function SkillNeedsReviewCard({
           : undefined
       }
       pending={managing}
-      actionDisabled={bulkActionPending || pendingStructuralAction !== null || !row.actions.canManage}
+      actionDisabled={
+        bulkActionPending ||
+        pendingStructuralAction !== null ||
+        checkingPackage ||
+        (!packageBacked && !packageContextFailed && !checkingPackage && !row.actions.canManage) ||
+        (packageReady && !canManagePackage)
+      }
       onOpen={() => onOpenSkill(row.skillRef)}
-      onAction={() => void onManageSkill(row.skillRef)}
+      onAction={() => {
+        if (packageContextFailed || packageNeedsReview) {
+          onOpenSkill(row.skillRef);
+        } else if (packageReady) {
+          void onManagePackage?.(row.skillRef);
+        } else {
+          void onManageSkill(row.skillRef);
+        }
+      }}
     />
   );
 }

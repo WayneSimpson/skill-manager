@@ -11,6 +11,8 @@ interface SkillDetailModalProps {
   pendingStructuralAction: StructuralSkillAction | null;
   onClose: () => void;
   onManageSkill: (skillRef: string) => Promise<void>;
+  onManagePackage: (skillRef: string) => Promise<void>;
+  onResolvePackage: (skillRef: string) => Promise<void>;
   onToggleSkill: (skillRef: string, harness: string, currentState: HarnessCellState) => Promise<void>;
   onUpdateSkill: (skillRef: string) => Promise<void>;
   onRemoveSkill: (skillRef: string) => Promise<void>;
@@ -24,6 +26,8 @@ export function SkillDetailModal({
   pendingStructuralAction,
   onClose,
   onManageSkill,
+  onManagePackage,
+  onResolvePackage,
   onToggleSkill,
   onUpdateSkill,
   onRemoveSkill,
@@ -45,6 +49,8 @@ export function SkillDetailModal({
               pendingStructuralAction={pendingStructuralAction}
               onClose={onClose}
               onManageSkill={onManageSkill}
+              onManagePackage={onManagePackage}
+              onResolvePackage={onResolvePackage}
               onToggleSkill={onToggleSkill}
               onUpdateSkill={onUpdateSkill}
               onRemoveSkill={onRemoveSkill}

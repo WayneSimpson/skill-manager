@@ -5,6 +5,14 @@ import { renderWithAppProviders } from "../../../../test/render";
 import type { SkillListRow } from "../../model/types";
 import { SkillNeedsReviewCard } from "./SkillNeedsReviewCard";
 
+vi.mock("../../api/queries", () => ({
+  useSkillPackageContextQuery: () => ({
+    data: { packageBacked: false, observation: null, resolution: null, managedPackage: null },
+    isPending: false,
+    isError: false,
+  }),
+}));
+
 describe("SkillNeedsReviewCard", () => {
   it("shows why a non-materializable runtime skill cannot be adopted", () => {
     const row: SkillListRow = {

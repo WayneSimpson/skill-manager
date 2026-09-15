@@ -12,9 +12,11 @@ interface ConfirmActionDialogProps {
   confirmLabel: string;
   pendingLabel: string;
   isPending: boolean;
+  confirmDisabled?: boolean;
   confirmTone?: "primary" | "danger";
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void | Promise<void>;
+  onCloseAutoFocus?: (event: Event) => void;
 }
 
 export function ConfirmActionDialog({
@@ -25,9 +27,11 @@ export function ConfirmActionDialog({
   confirmLabel,
   pendingLabel,
   isPending,
+  confirmDisabled = false,
   confirmTone = "danger",
   onOpenChange,
   onConfirm,
+  onCloseAutoFocus,
 }: ConfirmActionDialogProps) {
   const common = useCommonCopy();
 
@@ -44,6 +48,7 @@ export function ConfirmActionDialog({
         <Dialog.Overlay className="dialog-overlay" />
         <Dialog.Content
           className="dialog-content confirm-dialog"
+          onCloseAutoFocus={onCloseAutoFocus}
           onEscapeKeyDown={(event) => {
             if (isPending) {
               event.preventDefault();
@@ -63,8 +68,10 @@ export function ConfirmActionDialog({
           <div className="dialog-header confirm-dialog__header">
             <Dialog.Title className="dialog-title confirm-dialog__title">{title}</Dialog.Title>
           </div>
-          <Dialog.Description className="dialog-description confirm-dialog__description">
-            {description}
+          <Dialog.Description asChild>
+            <div className="dialog-description confirm-dialog__description">
+              {description}
+            </div>
           </Dialog.Description>
           {note ? <div className="confirm-dialog__note">{note}</div> : null}
           <div className="dialog-actions confirm-dialog__actions">
@@ -79,7 +86,7 @@ export function ConfirmActionDialog({
             <button
               type="button"
               className={`btn confirm-dialog__button confirm-dialog__button--${confirmTone}`}
-              disabled={isPending}
+              disabled={isPending || confirmDisabled}
               onClick={() => {
                 void onConfirm();
               }}

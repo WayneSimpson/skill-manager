@@ -139,6 +139,6 @@ describe("settings queries", () => {
     fireEvent.click(screen.getByRole("button", { name: "Refresh runtime skills" }));
     await waitFor(() => expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: skillsKeys.list() }));
     fireEvent.click(screen.getByRole("button", { name: "Clear runtime snapshot" }));
-    await waitFor(() => expect(invalidateSpy).toHaveBeenCalledTimes(6));
+    await waitFor(() => expect(invalidateSpy).toHaveBeenCalledTimes(14));
   });
 });

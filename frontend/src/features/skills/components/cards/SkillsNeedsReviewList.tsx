@@ -10,6 +10,7 @@ interface SkillsNeedsReviewListProps {
   selectedSkillRef: string | null;
   onOpenSkill: (skillRef: string) => void;
   onManageSkill: (skillRef: string) => Promise<void>;
+  onManagePackage: (skillRef: string) => Promise<void>;
 }
 
 export function SkillsNeedsReviewList({
@@ -19,6 +20,7 @@ export function SkillsNeedsReviewList({
   selectedSkillRef,
   onOpenSkill,
   onManageSkill,
+  onManagePackage,
 }: SkillsNeedsReviewListProps) {
   const copy = useSkillsCopy();
 
@@ -33,6 +35,7 @@ export function SkillsNeedsReviewList({
           selected={selectedSkillRef === row.skillRef}
           onOpenSkill={onOpenSkill}
           onManageSkill={onManageSkill}
+          onManagePackage={onManagePackage}
         />
       ))}
     </section>

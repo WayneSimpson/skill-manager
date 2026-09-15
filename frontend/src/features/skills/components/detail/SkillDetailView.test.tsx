@@ -18,6 +18,8 @@ function renderSubject() {
       pendingStructuralAction={null}
       onClose={vi.fn()}
       onManageSkill={vi.fn(async () => undefined)}
+      onManagePackage={vi.fn(async () => undefined)}
+      onResolvePackage={vi.fn(async () => undefined)}
       onToggleSkill={vi.fn(async () => undefined)}
       onUpdateSkill={vi.fn(async () => undefined)}
       onRemoveSkill={vi.fn(async () => undefined)}
@@ -30,6 +32,10 @@ describe("SkillDetailView", () => {
   it("shows a loading shell without skill actions while the detail query is pending", () => {
     useSkillDetailControllerMock.mockReturnValue({
       detail: null,
+      packageContext: null,
+      isPackageContextLoading: false,
+      packageContextErrorMessage: "",
+      retryPackageContext: vi.fn(),
       isInitialLoading: true,
       queryErrorMessage: "",
       actionErrorMessage: "",
@@ -37,6 +43,8 @@ describe("SkillDetailView", () => {
       isDeleteDialogOpen: false,
       dismissActionError: vi.fn(),
       onManage: vi.fn(),
+      onManagePackage: vi.fn(),
+      onResolvePackage: vi.fn(),
       onToggleHarness: vi.fn(),
       onUpdate: vi.fn(),
       requestRemove: vi.fn(),
@@ -57,6 +65,10 @@ describe("SkillDetailView", () => {
   it("shows an error fallback without a skill action rail when loading fails", () => {
     useSkillDetailControllerMock.mockReturnValue({
       detail: null,
+      packageContext: null,
+      isPackageContextLoading: false,
+      packageContextErrorMessage: "",
+      retryPackageContext: vi.fn(),
       isInitialLoading: false,
       queryErrorMessage: "boom",
       actionErrorMessage: "",
@@ -64,6 +76,8 @@ describe("SkillDetailView", () => {
       isDeleteDialogOpen: false,
       dismissActionError: vi.fn(),
       onManage: vi.fn(),
+      onManagePackage: vi.fn(),
+      onResolvePackage: vi.fn(),
       onToggleHarness: vi.fn(),
       onUpdate: vi.fn(),
       requestRemove: vi.fn(),

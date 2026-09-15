@@ -84,6 +84,26 @@ class PackageResolutionTests(unittest.TestCase):
         self.assertIsNone(result.artifact_root)
         read.assert_not_called()
 
+    def test_invalid_native_lock_metadata_requires_package_review(self):
+        package = self.root / 'native/node_modules/@sample/extension'
+        skill = package / 'skills/one'
+        skill.mkdir(parents=True)
+        (skill / 'SKILL.md').write_text('---\nname: one\ndescription: test\n---\nOne')
+        (package / 'package.json').write_text(json.dumps({'name': '@sample/extension', 'version': '1.2.3'}))
+        (self.root / 'native/package-lock.json').write_text(json.dumps({
+            'lockfileVersion': 3,
+            'packages': {
+                'node_modules/@sample/extension': {
+                    'version': '1.2.3',
+                    'resolved': 'https://registry.npmjs.org/@sample/extension/-/extension-1.2.3.tgz?invalid=1',
+                },
+            },
+        }))
+        entry = InventoryEntry('test', 'one', '', 'unmanaged', SourceDescriptor('runtime', 'opencode'),
+                               source_path=str(skill), runtime_materialize_path=skill)
+
+        self.assertTrue(self.resolver.has_package_provenance(entry))
+
     @patch('skill_manager.sources.github.read_public_bytes', side_effect=TimeoutError('secret-token'))
     def test_unavailable_is_sanitized_and_has_no_artifact(self, read):
         self.declare()

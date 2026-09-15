@@ -148,15 +148,19 @@ class PackageSourceResolver:
 
     def has_package_provenance(self, entry: InventoryEntry) -> bool:
         """Local-only routing hint; acquisition still requires a full resolution."""
-        if entry.runtime_only and entry.runtime_materialize_path is None:
-            return False
-        if entry.source_path is None:
-            paths = {item.path for item in entry.sightings if item.path is not None}
-            if len(paths) > 1:
-                return any(self.has_package_provenance(replace(entry, source_path=str(path))) for path in paths)
-        evidence, _ = self._evidence(entry)
-        return any(item.kind in ('package_repository', 'native_coordinate', 'npm_lock', 'npm_lock_git')
-                   for item in evidence)
+        try:
+            if entry.runtime_only and entry.runtime_materialize_path is None:
+                return False
+            if entry.source_path is None:
+                paths = {item.path for item in entry.sightings if item.path is not None}
+                if len(paths) > 1:
+                    return any(self.has_package_provenance(replace(entry, source_path=str(path))) for path in paths)
+            evidence, _ = self._evidence(entry)
+            return any(item.kind in ('package_repository', 'native_coordinate', 'npm_lock', 'npm_lock_git')
+                       for item in evidence)
+        except (OSError, ValueError, RuntimeError, configparser.Error):
+            # Unreadable provenance requires review, never a silent standalone fallback.
+            return True
 
     def resolve(self, entry: InventoryEntry, *, work_dir: Path,
                 authoritative_source: PackageSource | None = None) -> PackageResolution:

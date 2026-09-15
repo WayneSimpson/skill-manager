@@ -18,7 +18,9 @@ import type {
 import {
   useDeleteSkillMutation,
   useManageAllSkillsMutation,
+  useManageSourcePackageMutation,
   useManageSkillMutation,
+  useResolveSkillPackageMutation,
   useSetSkillHarnessesMutation,
   useSkillsListQuery,
   useToggleSkillMutation,
@@ -36,6 +38,8 @@ export interface SkillsWorkspaceController {
   queryErrorMessage: string;
   closeSelectedSkill: () => void;
   handleManageSkill: (skillRef: string) => Promise<void>;
+  handleManagePackage: (skillRef: string) => Promise<void>;
+  handleResolvePackage: (skillRef: string) => Promise<void>;
   handleToggleSkill: (skillRef: string, harness: string, currentState: HarnessCellState) => Promise<void>;
   handleUpdateSkill: (skillRef: string) => Promise<void>;
   handleRemoveSkill: (skillRef: string) => Promise<void>;
@@ -48,6 +52,8 @@ export function useSkillsWorkspaceController(): SkillsWorkspaceController {
   const toggleMutation = useToggleSkillMutation();
   const setHarnessesMutation = useSetSkillHarnessesMutation();
   const manageMutation = useManageSkillMutation();
+  const managePackageMutation = useManageSourcePackageMutation();
+  const resolvePackageMutation = useResolveSkillPackageMutation();
   const manageAllMutation = useManageAllSkillsMutation();
   const updateMutation = useUpdateSkillMutation();
   const removeMutation = useUnmanageSkillMutation();
@@ -167,6 +173,33 @@ export function useSkillsWorkspaceController(): SkillsWorkspaceController {
       "manage",
       () => manageMutation.mutateAsync({ skillRef }),
       false,
+    );
+  }
+
+  async function handleManagePackage(skillRef: string): Promise<void> {
+    await runStructuralAction(
+      skillRef,
+      "manage",
+      () => managePackageMutation.mutateAsync({ skillRef }),
+      false,
+    );
+  }
+
+  async function handleResolvePackage(skillRef: string): Promise<void> {
+    await runStructuralAction(
+      skillRef,
+      "resolve",
+      () => resolvePackageMutation.mutateAsync({ skillRef }),
+      false,
+    );
+  }
+
+  async function handleManagePackageFromList(skillRef: string): Promise<void> {
+    await runStructuralAction(
+      skillRef,
+      "manage",
+      () => managePackageMutation.mutateAsync({ skillRef }),
+      true,
     );
   }
 
@@ -431,6 +464,7 @@ export function useSkillsWorkspaceController(): SkillsWorkspaceController {
     multiSelectPending,
     onManageAll: () => void handleManageAll(),
     onManageSkill: handleManageSkillFromList,
+    onManagePackage: handleManagePackageFromList,
     onOpenSkill: handleOpenSkill,
     onToggleCell: handleToggleCell,
     onToggleMultiSelect: toggleMultiSelect,
@@ -454,6 +488,8 @@ export function useSkillsWorkspaceController(): SkillsWorkspaceController {
     queryErrorMessage,
     closeSelectedSkill,
     handleManageSkill,
+    handleManagePackage,
+    handleResolvePackage,
     handleToggleSkill,
     handleUpdateSkill,
     handleRemoveSkill,

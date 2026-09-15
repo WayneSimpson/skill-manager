@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 import os
 from dataclasses import dataclass
 
@@ -45,6 +46,8 @@ from .skills.runtime import (
     RuntimeSkillSnapshotStore,
     RuntimeSkillsService,
 )
+from .skills.native_package_runtime import NativePackageAdapterFactory
+from .skills.package_deployment_service import NativePackageAdapter
 from .skills.source_fetch import SourceFetchService
 from .skills.store import SkillStore
 from .marketplace_cache import MarketplaceCache
@@ -63,6 +66,7 @@ class BackendContainer:
     skills_read_models: SkillsReadModelService
     skills_queries: SkillsQueryService
     skills_mutations: SkillsMutationService
+    skills_native_package_adapter_factory: Callable[[str], NativePackageAdapter]
     opencode_runtime_skills: RuntimeSkillsService
     settings_queries: SettingsQueryService
     settings_mutations: SettingsMutationService
@@ -95,6 +99,7 @@ def build_backend_container(
     source_fetcher: SourceFetchService | None = None,
     mcp_availability_probe: McpAvailabilityProbe | None = None,
     runtime_skill_client: RuntimeSkillClient | None = None,
+    native_package_adapter_factory: Callable[[str], NativePackageAdapter] | None = None,
 ) -> BackendContainer:
     active_env = dict(os.environ)
     if env is not None:
@@ -116,6 +121,10 @@ def build_backend_container(
         runtime_snapshot=runtime_skills.store,
     )
     invalidation.register(skills_read_models)
+    active_native_package_factory = native_package_adapter_factory or NativePackageAdapterFactory(
+        harness_kernel,
+        active_env,
+    )
 
     active_source_fetcher = source_fetcher or SourceFetchService()
     skills_queries = SkillsQueryService(skills_read_models, active_source_fetcher)
@@ -215,6 +224,7 @@ def build_backend_container(
         skills_read_models=skills_read_models,
         skills_queries=skills_queries,
         skills_mutations=skills_mutations,
+        skills_native_package_adapter_factory=active_native_package_factory,
         opencode_runtime_skills=runtime_skills,
         settings_queries=settings_queries,
         settings_mutations=settings_mutations,

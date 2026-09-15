@@ -8,10 +8,18 @@ import {
   disableSkill,
   enableSkill,
   fetchSkillDetail,
+  fetchSkillPackageContext,
   fetchSkillSourceStatus,
+  fetchManagedPackages,
+  fetchPackageDeployments,
+  fetchSourcePackages,
   fetchSkillsPage,
   manageAllSkills,
   manageSkill,
+  manageSourcePackage,
+  mutatePackageDeployment,
+  refreshManagedPackage,
+  resolveSkillPackage,
   setSkillHarnesses,
   unmanageSkill,
   updateSkill,
@@ -56,6 +64,32 @@ export function useSkillSourceStatusQuery(skillRef: string | null) {
     queryKey: skillsKeys.sourceStatus(skillRef ?? "__none__"),
     queryFn: () => fetchSkillSourceStatus(skillRef!),
     enabled: Boolean(skillRef),
+    ...queryPolicy(SKILLS_STALE_TIME_MS, SKILLS_GC_TIME_MS),
+  });
+}
+
+export function useManagedPackagesQuery() {
+  return useQuery({
+    queryKey: skillsKeys.managedPackages(),
+    queryFn: fetchManagedPackages,
+    ...queryPolicy(0, SKILLS_GC_TIME_MS),
+  });
+}
+
+export function useSourcePackagesQuery() {
+  return useQuery({
+    queryKey: skillsKeys.sourcePackages(),
+    queryFn: fetchSourcePackages,
+    ...queryPolicy(0, SKILLS_GC_TIME_MS),
+  });
+}
+
+export function useSkillPackageContextQuery(skillRef: string | null) {
+  return useQuery({
+    queryKey: skillsKeys.packageContext(skillRef ?? "__none__"),
+    queryFn: () => fetchSkillPackageContext(skillRef!),
+    enabled: Boolean(skillRef),
+    retry: false,
     ...queryPolicy(SKILLS_STALE_TIME_MS, SKILLS_GC_TIME_MS),
   });
 }
@@ -239,10 +273,94 @@ export function useManageSkillMutation() {
   return useMutation({
     mutationFn: ({ skillRef }: { skillRef: string }) => manageSkill(skillRef),
     onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({ queryKey: skillsKeys.list() });
+      // Standalone adoption changes the ref; do not refetch the retired observation.
+      const page = queryClient.getQueryData<SkillsPageDto>(skillsKeys.list());
+      const refetchType = page?.rows.some((row) => row.skillRef === variables.skillRef) ? 'active' : 'none';
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: skillsKeys.list() }),
+        queryClient.invalidateQueries({ queryKey: skillsKeys.detail(variables.skillRef), refetchType }),
+        queryClient.invalidateQueries({ queryKey: skillsKeys.sourceStatus(variables.skillRef), refetchType }),
+        queryClient.invalidateQueries({ queryKey: skillsKeys.packageContext(variables.skillRef), refetchType }),
+      ]);
+    },
+  });
+}
+
+export function useManageSourcePackageMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ skillRef }: { skillRef: string }) => manageSourcePackage(skillRef),
+    onSettled: async (_data, _error, variables) => {
+      await Promise.all([
         queryClient.invalidateQueries({ queryKey: skillsKeys.detail(variables.skillRef) }),
-        queryClient.invalidateQueries({ queryKey: skillsKeys.sourceStatus(variables.skillRef) }),
+        queryClient.invalidateQueries({ queryKey: skillsKeys.list() }),
+        queryClient.invalidateQueries({ queryKey: skillsKeys.sourcePackages() }),
+        queryClient.invalidateQueries({ queryKey: skillsKeys.managedPackages() }),
+        queryClient.invalidateQueries({ queryKey: skillsKeys.packageContext(variables.skillRef) }),
+      ]);
+    },
+  });
+}
+
+export function useRefreshManagedPackageMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ packageId }: { packageId: string }) => refreshManagedPackage(packageId),
+    onSuccess: async (_data, variables) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: skillsKeys.managedPackages() }),
+        queryClient.invalidateQueries({ queryKey: skillsKeys.sourcePackages() }),
+        queryClient.invalidateQueries({ queryKey: skillsKeys.detailPrefix() }),
+        queryClient.invalidateQueries({ queryKey: skillsKeys.packageDeploymentsPrefix() }),
+        queryClient.invalidateQueries({ queryKey: skillsKeys.packageContextPrefix() }),
+      ]);
+    },
+  });
+}
+
+export function useResolveSkillPackageMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ skillRef }: { skillRef: string }) => resolveSkillPackage(skillRef),
+    onSuccess: (data, variables) => {
+      queryClient.setQueryData(skillsKeys.packageContext(variables.skillRef), data);
+    },
+    onError: async (_error, variables) => {
+      await queryClient.invalidateQueries({ queryKey: skillsKeys.packageContext(variables.skillRef) });
+    },
+  });
+}
+
+export function usePackageDeploymentsQuery(packageId: string | null) {
+  return useQuery({
+    queryKey: skillsKeys.packageDeployments(packageId ?? "__none__"),
+    queryFn: () => fetchPackageDeployments(packageId!),
+    enabled: Boolean(packageId),
+    retry: false,
+    ...queryPolicy(0, SKILLS_GC_TIME_MS),
+  });
+}
+
+export function usePackageDeploymentMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      packageId,
+      harness,
+      action,
+      replacementPackageId,
+    }: {
+      packageId: string;
+      harness: Parameters<typeof mutatePackageDeployment>[1];
+      action: Parameters<typeof mutatePackageDeployment>[2];
+      replacementPackageId?: string;
+    }) => mutatePackageDeployment(packageId, harness, action, replacementPackageId),
+    onSettled: async (_data, _error, variables) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: skillsKeys.packageDeployments(variables.packageId) }),
+        queryClient.invalidateQueries({ queryKey: skillsKeys.packageDeploymentsPrefix() }),
+        queryClient.invalidateQueries({ queryKey: skillsKeys.packageContextPrefix() }),
+        queryClient.invalidateQueries({ queryKey: skillsKeys.managedPackages() }),
       ]);
     },
   });

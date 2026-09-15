@@ -63,8 +63,8 @@ describe("SkillDetailSourcePackage", () => {
     expect(screen.getByText("Original skill source")).toBeInTheDocument();
     expect(screen.getByText("/workspace/trace-lens/skills/trace-lens", { exact: true })).toBeInTheDocument();
     expect(screen.getAllByText("Portable/shared")).toHaveLength(2);
-    expect(screen.getByText("Individual skill copying is supported")).toBeInTheDocument();
-    expect(screen.getByText("Package deployment is not supported")).toBeInTheDocument();
+    expect(screen.queryByText("Individual skill copying is supported")).not.toBeInTheDocument();
+    expect(screen.queryByText("Package deployment is not supported")).not.toBeInTheDocument();
     expect(screen.getByText("demo-server")).toBeInTheDocument();
     expect(screen.getByText(/Package hooks, MCP configuration, and plugin code are not installed by skill toggles/i)).toBeInTheDocument();
   });
@@ -114,7 +114,7 @@ describe("SkillDetailSourcePackage", () => {
 
     expect(screen.getByText("Unknown extension · not portable")).toBeInTheDocument();
     expect(screen.queryByText("Portable/shared")).not.toBeInTheDocument();
-    expect(screen.getByText("Package deployment is not supported")).toBeInTheDocument();
+    expect(screen.queryByText("Package deployment is not supported")).not.toBeInTheDocument();
   });
 
   it("explains an unresolved package without suggesting the skill itself cannot be used", () => {

@@ -78,6 +78,8 @@ vi.mock("../api/queries", () => ({
     },
   }),
   useManageSkillMutation: () => ({ mutateAsync: vi.fn() }),
+  useManageSourcePackageMutation: () => ({ mutateAsync: vi.fn() }),
+  useResolveSkillPackageMutation: () => ({ mutateAsync: vi.fn() }),
   useManageAllSkillsMutation: () => ({ mutateAsync: vi.fn() }),
   useUpdateSkillMutation: () => ({ mutateAsync: vi.fn() }),
   useUnmanageSkillMutation: () => ({ mutateAsync: vi.fn() }),

@@ -9,6 +9,15 @@ import type {
   SkillsPageDto,
   SkillSourceStatusDto,
 } from "./types";
+import type {
+  ManagedPackageResponse,
+  ManagedPackagesResponse,
+  PackageDeploymentActionRequest,
+  PackageDeploymentHarnessResponse,
+  PackageDeploymentsResponse,
+  SourcePackagesResponse,
+  SkillPackageContextResponse,
+} from "./package-types";
 import { fetchJson, postJson } from "../../../api/http";
 
 export async function fetchSkillsPage(): Promise<SkillsPageDto> {
@@ -46,6 +55,58 @@ export async function setSkillHarnesses(
 
 export async function manageSkill(skillRef: string): Promise<OkResponse> {
   return postJson<OkResponse>(`/skills/${encodeURIComponent(skillRef)}/manage`);
+}
+
+export async function manageSourcePackage(skillRef: string): Promise<ManagedPackageResponse> {
+  return postJson<ManagedPackageResponse>(`/skills/${encodeURIComponent(skillRef)}/manage-package`);
+}
+
+export async function fetchManagedPackages(): Promise<ManagedPackagesResponse> {
+  return fetchJson<ManagedPackagesResponse>("/skills/managed-packages");
+}
+
+export async function fetchSourcePackages(): Promise<SourcePackagesResponse> {
+  return fetchJson<SourcePackagesResponse>("/skills/source-packages");
+}
+
+export async function fetchSkillPackageContext(skillRef: string): Promise<SkillPackageContextResponse> {
+  return fetchJson<SkillPackageContextResponse>(
+    `/skills/${encodeURIComponent(skillRef)}/package-context`,
+  );
+}
+
+export async function resolveSkillPackage(skillRef: string): Promise<SkillPackageContextResponse> {
+  return postJson<SkillPackageContextResponse>(
+    `/skills/${encodeURIComponent(skillRef)}/resolve-package`,
+  );
+}
+
+export async function refreshManagedPackage(packageId: string): Promise<ManagedPackageResponse> {
+  return postJson<ManagedPackageResponse>(
+    `/skills/managed-packages/${encodeURIComponent(packageId)}/refresh`,
+  );
+}
+
+export async function fetchPackageDeployments(packageId: string): Promise<PackageDeploymentsResponse> {
+  return fetchJson<PackageDeploymentsResponse>(
+    `/skills/managed-packages/${encodeURIComponent(packageId)}/deployments`,
+  );
+}
+
+export async function mutatePackageDeployment(
+  packageId: string,
+  harness: PackageDeploymentHarnessResponse["harness"],
+  action: PackageDeploymentActionRequest["action"],
+  replacementPackageId?: string,
+): Promise<PackageDeploymentsResponse> {
+  const body: PackageDeploymentActionRequest = {
+    action,
+    ...(replacementPackageId ? { replacementPackageId } : {}),
+  };
+  return postJson<PackageDeploymentsResponse>(
+    `/skills/managed-packages/${encodeURIComponent(packageId)}/deployments/${encodeURIComponent(harness)}`,
+    body,
+  );
 }
 
 export async function updateSkill(skillRef: string): Promise<OkResponse> {

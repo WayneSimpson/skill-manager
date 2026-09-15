@@ -12,6 +12,7 @@ import SkillsNeedsReviewPage from "./features/skills/screens/SkillsNeedsReviewPa
 import SkillsInUsePage from "./features/skills/screens/SkillsInUsePage";
 import ScanConfigPage from "./features/skills/screens/ScanConfigPage";
 import SkillsWorkspacePage from "./features/skills/screens/SkillsWorkspacePage";
+import ManagedPackagesPage from "./features/skills/screens/ManagedPackagesPage";
 import { LocaleProvider, useCommonCopy } from "./i18n";
 
 const MarketplaceLayout = lazy(() => import("./features/marketplace/screens/MarketplaceLayout"));
@@ -80,6 +81,7 @@ function AppContent() {
             <Route index element={<Navigate to="use" replace />} />
             <Route path="use" element={<SkillsInUsePage />} />
             <Route path="review" element={<SkillsNeedsReviewPage />} />
+            <Route path="packages" element={<ManagedPackagesPage />} />
           </Route>
 
           <Route path="mcp" element={<Navigate to="/mcp/use" replace />} />

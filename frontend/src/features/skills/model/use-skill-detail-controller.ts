@@ -1,10 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { HarnessCellState } from "./types";
-import { useSkillDetailQuery, useSkillSourceStatusQuery } from "../api/queries";
+import {
+  useSkillDetailQuery,
+  useSkillPackageContextQuery,
+  useSkillSourceStatusQuery,
+} from "../api/queries";
 
 interface SkillDetailMutationHandlers {
   onManageSkill: (skillRef: string) => Promise<void>;
+  onManagePackage: (skillRef: string) => Promise<void>;
+  onResolvePackage: (skillRef: string) => Promise<void>;
   onToggleSkill: (skillRef: string, harness: string, currentState: HarnessCellState) => Promise<void>;
   onUpdateSkill: (skillRef: string) => Promise<void>;
   onRemoveSkill: (skillRef: string) => Promise<void>;
@@ -17,6 +23,7 @@ export function useSkillDetailController(
 ) {
   const detailQuery = useSkillDetailQuery(skillRef);
   const sourceStatusQuery = useSkillSourceStatusQuery(skillRef);
+  const packageContextQuery = useSkillPackageContextQuery(skillRef);
   const [actionErrorMessage, setActionErrorMessage] = useState("");
   const [isRemoveDialogOpen, setRemoveDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -37,6 +44,9 @@ export function useSkillDetailController(
     : sourceStatusQuery.error instanceof Error
       ? sourceStatusQuery.error.message
       : "";
+  const packageContextErrorMessage = packageContextQuery.error instanceof Error
+    ? packageContextQuery.error.message
+    : "";
 
   useEffect(() => () => {
     isMountedRef.current = false;
@@ -87,11 +97,17 @@ export function useSkillDetailController(
     detail,
     isInitialLoading,
     queryErrorMessage,
+    packageContext: packageContextQuery.data ?? null,
+    isPackageContextLoading: packageContextQuery.isPending || packageContextQuery.isFetching,
+    packageContextErrorMessage,
+    retryPackageContext: () => { void packageContextQuery.refetch(); },
     actionErrorMessage,
     isRemoveDialogOpen,
     isDeleteDialogOpen,
     dismissActionError: () => setActionErrorMessage(""),
     onManage: () => detail && void runAction(() => handlers.onManageSkill(detail.skillRef)),
+    onManagePackage: () => detail && void runAction(() => handlers.onManagePackage(detail.skillRef)),
+    onResolvePackage: () => detail && void runAction(() => handlers.onResolvePackage(detail.skillRef)),
     onToggleHarness: (harness: string, currentState: HarnessCellState) =>
       detail && void runAction(() => handlers.onToggleSkill(detail.skillRef, harness, currentState)),
     onUpdate: () => detail && void runAction(() => handlers.onUpdateSkill(detail.skillRef)),

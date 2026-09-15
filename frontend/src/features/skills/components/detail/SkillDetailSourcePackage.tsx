@@ -122,9 +122,6 @@ function PackageComponentRow({
       <span className="skill-detail__source-package-detail">
         {component.manifest} · {copy.evidence(component.evidence)}
       </span>
-      <span className="skill-detail__source-package-support">
-        {component.supported ? copy.individualSkillCopySupported : copy.packageDeploymentUnsupported}
-      </span>
     </article>
   );
 }

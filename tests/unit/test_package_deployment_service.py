@@ -441,6 +441,17 @@ class PackageDeploymentServiceTests(unittest.TestCase):
             self.service.disable(deployment['deploymentId'], unsupported)
         self.assertTrue(self.service.list_deployments()[deployment['deploymentId']]['enabled'])
 
+    def test_native_control_failure_is_reported_as_a_deployment_error(self):
+        adapter = self._adapter()
+        deployment = self.service.deploy(self.record['id'], adapter)['deployment']
+        failing = self._adapter()
+        failing.set_enabled = lambda _plan, _enabled: (_ for _ in ()).throw(RuntimeError('native failed'))
+
+        with self.assertRaises(PackageDeploymentError):
+            self.service.disable(deployment['deploymentId'], failing)
+
+        self.assertTrue(self.service.list_deployments()[deployment['deploymentId']]['enabled'])
+
     def test_crash_leftover_is_not_adopted_or_deleted(self):
         adapter = self._adapter()
         leftover = adapter.root / 'skills' / '.skill-manager-leftover.staging'

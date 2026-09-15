@@ -1,9 +1,10 @@
 # Native whole-package execution (Task 07)
 
-The backend entry point is `SkillsMutationService.package_deployments`, or
-`PackageDeploymentService(existing_managed_package_store)`. It consumes the
-accepted Task06 planner and Task05 store. No HTTP endpoints or package UX are
-introduced here.
+The backend execution entry point is `SkillsMutationService.package_deployments`,
+or `PackageDeploymentService(existing_managed_package_store)`. It consumes the
+accepted Task06 planner and Task05 store. HTTP endpoints and package UX call
+this service without supplying plans or native paths; their response and state
+contract is documented in `docs/package-management-ux.md`.
 
 ## Operations
 

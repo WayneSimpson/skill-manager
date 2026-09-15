@@ -11,6 +11,8 @@ import { skillStatusConcept } from "../../../../lib/product-language";
 import { useSkillsCopy, type SkillsCopy } from "../../i18n";
 import type { StructuralSkillAction } from "../../model/pending";
 import type { HarnessCell, SkillDetail, SkillSourceLinks } from "../../model/types";
+import type { SkillPackageContextResponse } from "../../api/package-types";
+import { PackageAwareSkillPanel } from "../package/PackageAwareSkillPanel";
 import { SkillDetailHarnessMatrix } from "./SkillDetailHarnessMatrix";
 import { SkillDetailRemoveAction } from "./SkillDetailRemoveAction";
 import { SkillDetailSourcePackage } from "./SkillDetailSourcePackage";
@@ -21,6 +23,10 @@ const MarkdownDocument = lazy(() => import("../../../../components/MarkdownDocum
 
 interface SkillDetailContentProps {
   detail: SkillDetail;
+  packageContext?: SkillPackageContextResponse | null;
+  isPackageContextLoading?: boolean;
+  packageContextErrorMessage?: string;
+  onRetryPackageContext?: () => void;
   actionErrorMessage: string;
   queryErrorMessage: string;
   pendingToggleHarnesses: ReadonlySet<string>;
@@ -28,6 +34,8 @@ interface SkillDetailContentProps {
   onClose: () => void;
   onDismissActionError: () => void;
   onManage: () => void;
+  onManagePackage: () => void;
+  onResolvePackage: () => void;
   onToggleHarness: (cell: HarnessCell) => void;
   onUpdate: () => void;
   onRequestRemove: () => void;
@@ -36,6 +44,10 @@ interface SkillDetailContentProps {
 
 export function SkillDetailContent({
   detail,
+  packageContext,
+  isPackageContextLoading = false,
+  packageContextErrorMessage = "",
+  onRetryPackageContext,
   actionErrorMessage,
   queryErrorMessage,
   pendingToggleHarnesses,
@@ -43,6 +55,8 @@ export function SkillDetailContent({
   onClose,
   onDismissActionError,
   onManage,
+  onManagePackage,
+  onResolvePackage,
   onToggleHarness,
   onUpdate,
   onRequestRemove,
@@ -56,12 +70,27 @@ export function SkillDetailContent({
   const hasPendingHarnessToggles = pendingToggleHarnesses.size > 0;
   const structuralLocked = pendingStructuralAction !== null;
   const controlsDisabled = structuralLocked || hasPendingHarnessToggles;
+  const packageBacked = packageContext?.packageBacked === true;
+  const packageContextChecking = isPackageContextLoading && !packageContextErrorMessage;
+  const packageContextUnavailable = Boolean(packageContextErrorMessage);
+  // Existing standalone ownership is independent of newly discovered package context.
+  const independentlyManaged = detail.actions.canDelete || detail.actions.stopManagingStatus !== null;
+  const individualControlsDisabled = !independentlyManaged && (packageBacked || packageContextChecking || packageContextUnavailable);
+  const individualControlsHint = packageContextChecking
+    ? copy.detail.packageManagement.individualControlsChecking
+    : packageContextUnavailable
+      ? copy.detail.packageManagement.individualControlsUnavailable
+      : packageContext?.managedPackage
+        ? copy.detail.packageManagement.individualControlsManaged
+        : packageBacked
+          ? copy.detail.packageManagement.individualControlsReview
+          : undefined;
 
   const errorMessage = actionErrorMessage || queryErrorMessage;
   const dismissError = actionErrorMessage ? onDismissActionError : undefined;
 
   const showUpdateControl = detail.actions.updateStatus !== null && detail.actions.updateStatus !== "local_changes_detected";
-  const showFooter = computeShowFooter(detail);
+  const showFooter = computeShowFooter(detail, packageBacked, packageContextChecking, packageContextUnavailable);
   const showHarnessSection = detail.harnessCells.length > 0;
 
   return (
@@ -102,6 +131,22 @@ export function SkillDetailContent({
           ) : null}
         </DetailSection>
 
+        {packageContextErrorMessage ? <DetailNote>
+          {packageContextErrorMessage}
+          {onRetryPackageContext ? <button type="button" className="action-pill" onClick={onRetryPackageContext}
+            disabled={isPackageContextLoading}>{copy.detail.packageManagement.retryCheck}</button> : null}
+        </DetailNote> : null}
+        {packageBacked && packageContext ? (
+          <PackageAwareSkillPanel
+            context={packageContext}
+            pendingStructuralAction={pendingStructuralAction}
+            onManagePackage={onManagePackage}
+            onResolvePackage={onResolvePackage}
+            disabled={packageContextChecking || packageContextUnavailable}
+            canManagePackage={!independentlyManaged}
+          />
+        ) : null}
+
         <DetailDisclosure
           title="SKILL.md"
           defaultOpen={false}
@@ -127,12 +172,16 @@ export function SkillDetailContent({
               cells={detail.harnessCells}
               pendingToggleHarnesses={pendingToggleHarnesses}
               pendingStructuralAction={pendingStructuralAction}
+              individualControlsDisabled={individualControlsDisabled}
+              individualControlsHint={individualControlsHint}
               onToggleCell={onToggleHarness}
             />
           </DetailSection>
         ) : null}
 
-        {detail.sourcePackage ? <SkillDetailSourcePackage sourcePackage={detail.sourcePackage} /> : null}
+        {!packageBacked && !packageContextChecking && detail.sourcePackage ? (
+          <SkillDetailSourcePackage sourcePackage={detail.sourcePackage} />
+        ) : null}
 
         {detail.locations.length > 0 ? (
           <DetailSection heading={copy.detail.locations}>
@@ -146,7 +195,7 @@ export function SkillDetailContent({
                 const descriptor = locationDescriptor(detail, location, copy);
                 return (
                   <article
-                    key={`${location.kind}:${location.path ?? index}`}
+                    key={`${location.kind}:${location.path ?? "unknown"}:${index}`}
                     className="skill-detail__location"
                   >
                     <div className="skill-detail__location-header">
@@ -168,7 +217,7 @@ export function SkillDetailContent({
       )}
       footer={showFooter ? (
         <>
-          {detail.actions.canManage ? (
+          {detail.actions.canManage && !packageBacked && !packageContextChecking && !packageContextUnavailable ? (
             <button
               type="button"
               className="action-pill action-pill--md action-pill--accent"
@@ -179,6 +228,12 @@ export function SkillDetailContent({
                 <LoadingSpinner size="sm" label={copy.detail.managingSkill} />
               ) : null}
               {copy.detail.addToSkillManager}
+            </button>
+          ) : null}
+          {detail.actions.canManage && detail.sourceLinks && !packageBacked && !packageContextChecking && !packageContextUnavailable ? (
+            <button type="button" className="action-pill action-pill--md" disabled={controlsDisabled}
+              onClick={onResolvePackage}>
+              {copy.detail.reviewPackageSource}
             </button>
           ) : null}
           {showUpdateControl ? (
@@ -234,9 +289,14 @@ function skillSourceLinks(sourceLinks: SkillSourceLinks, copy: SkillsCopy): Deta
   return links;
 }
 
-function computeShowFooter(detail: SkillDetail): boolean {
+function computeShowFooter(
+  detail: SkillDetail,
+  packageBacked: boolean,
+  packageContextChecking: boolean,
+  packageContextUnavailable: boolean,
+): boolean {
   return (
-    detail.actions.canManage ||
+    (detail.actions.canManage && !packageBacked && !packageContextChecking && !packageContextUnavailable) ||
     (detail.actions.updateStatus !== null && detail.actions.updateStatus !== "local_changes_detected") ||
     detail.actions.stopManagingStatus !== null ||
     detail.actions.canDelete

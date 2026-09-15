@@ -2,8 +2,13 @@ export {
   useDeleteSkillMutation,
   useManageAllSkillsMutation,
   useManageSkillMutation,
+  useManageSourcePackageMutation,
+  useManagedPackagesQuery,
+  useRefreshManagedPackageMutation,
+  useSourcePackagesQuery,
   useSetSkillHarnessesMutation,
   useSkillDetailQuery,
+  useSkillPackageContextQuery,
   useSkillsListQuery,
   useSkillSourceStatusQuery,
   useToggleSkillMutation,
@@ -19,6 +24,13 @@ export type {
   SkillListRow,
   SkillsWorkspaceData,
 } from "./model/types";
+export type {
+  ManagedPackageResponse,
+  ManagedPackagesResponse,
+  PackageResolutionResponse,
+  SourcePackagesResponse,
+  SkillPackageContextResponse,
+} from "./api/package-types";
 export { SkillsWorkspaceSessionProvider } from "./model/session";
 
 export const skillsRoutes = {
@@ -26,4 +38,5 @@ export const skillsRoutes = {
   needsReview: "/skills/review",
   scanConfig: "/scan-config",
   marketplace: "/marketplace/skills",
+  packages: "/skills/packages",
 } as const;

@@ -275,7 +275,6 @@
 
 .skill-detail__source-package-component-header span,
 .skill-detail__source-package-detail,
-.skill-detail__source-package-support,
 .skill-detail__source-package-list-row span {
   color: var(--color-text-muted);
   font-size: var(--font-size-xs);
@@ -294,20 +293,6 @@
   padding-left: 20px;
   color: var(--color-text-muted);
   font-size: var(--font-size-xs);
-}
-
-@media (max-width: 560px) {
-  .skill-detail__source-package-field {
-    grid-template-columns: 1fr;
-    gap: 4px;
-  }
-
-  .skill-detail__source-package-component-header,
-  .skill-detail__source-package-list-row {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 4px;
-  }
 }
 
 .skill-detail-disclosure {
@@ -493,6 +478,509 @@
 .skill-detail__markdown thead th {
   color: var(--color-text);
   background: rgba(255, 255, 255, 0.04);
+}
+
+/* Package-aware lifecycle panels. These surfaces keep observation, ownership,
+ * and upstream resolution visually separate instead of flattening them into
+ * one install status. */
+.package-context-card,
+.managed-package-summary {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.package-context-card {
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+}
+
+.package-context-card--managed {
+  background: var(--color-surface);
+}
+
+.package-context-card__lifecycle {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.package-context-card__step {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: var(--space-3);
+  border-left: 2px solid var(--color-border-strong);
+}
+
+.package-context-card__step span,
+.managed-package-summary__field dt {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.package-context-card__step strong {
+  overflow-wrap: anywhere;
+  font-size: var(--font-size-sm);
+}
+
+.package-context-card__step[data-tone="positive"] {
+  border-left-color: var(--color-accent);
+}
+
+.package-context-card__step[data-tone="warning"] {
+  border-left-color: var(--color-warning);
+}
+
+.package-context-card__metadata,
+.managed-package-summary__metadata {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  margin: 0;
+}
+
+.package-context-card__metadata > div,
+.managed-package-summary__field {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.32fr) minmax(0, 1fr);
+  gap: var(--space-3);
+  min-width: 0;
+  align-items: baseline;
+}
+
+.package-context-card__metadata dd,
+.managed-package-summary__field dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.package-context-card__metadata code,
+.managed-package-summary code {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  overflow-wrap: anywhere;
+}
+
+.package-context-card__resolution {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-left: 2px solid var(--color-warning);
+  background: var(--color-surface);
+}
+
+.package-context-card__resolution[data-status="resolved"] {
+  border-left-color: var(--color-accent);
+}
+
+.package-context-card__resolution-header,
+.managed-package-summary__identity,
+.managed-package-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.package-context-card__resolution-header code {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.package-context-card__resolution p,
+.managed-package-summary__note {
+  margin: 0;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+.package-context-card__resolution ul,
+.managed-package-summary__diagnostics {
+  margin: 0;
+  padding-left: var(--space-5);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.package-context-card__evidence {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.package-context-card__evidence li {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.package-context-card__evidence span {
+  overflow-wrap: anywhere;
+}
+
+.package-context-card__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.package-context-card__actions .detail-note {
+  flex: 1 1 240px;
+}
+
+.managed-package-card {
+  display: grid;
+  gap: var(--space-5);
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.managed-package-deployments {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+.managed-package-deployments__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.managed-package-deployments__header h3,
+.managed-package-deployment-row h4 {
+  margin: 0;
+  color: var(--color-text);
+}
+
+.managed-package-deployments__header p {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.managed-package-deployments__refreshing {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.managed-package-deployments__rows {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.managed-package-deployment-row {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+}
+
+.managed-package-deployment-row__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.managed-package-deployment-row__method {
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.managed-package-deployment-row__metadata {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.managed-package-deployment-row__metadata div {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.managed-package-deployment-row__metadata dt {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.managed-package-deployment-row__metadata dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: var(--font-size-xs);
+}
+
+.managed-package-deployment-row__metadata code {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+}
+
+.managed-package-deployment-row__note {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+}
+
+.managed-package-deployment-row__details {
+  display: grid;
+  gap: var(--space-1);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.managed-package-deployment-row__details[data-tone="warning"] {
+  color: var(--color-warning);
+}
+
+.managed-package-deployment-row__details ul {
+  margin: 0;
+  padding-left: var(--space-5);
+}
+
+.managed-package-deployment-row__actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.managed-package-deployment-confirmation {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.managed-package-deployment-confirmation > p,
+.managed-package-deployment-confirmation__muted,
+.managed-package-deployment-confirmation__preflight p {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.managed-package-deployment-confirmation dl {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.managed-package-deployment-confirmation dl > div {
+  display: grid;
+  grid-template-columns: minmax(84px, 0.28fr) minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: baseline;
+}
+
+.managed-package-deployment-confirmation dt,
+.managed-package-deployment-confirmation__preflight > strong {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.managed-package-deployment-confirmation dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.managed-package-deployment-confirmation dd code,
+.managed-package-deployment-confirmation select {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+}
+
+.managed-package-deployment-confirmation__replacement {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.managed-package-deployment-confirmation__replacement span {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.managed-package-deployment-confirmation__replacement select {
+  min-width: 0;
+  padding: var(--space-2);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.managed-package-deployment-confirmation__preflight {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.managed-package-deployment-confirmation__preflight ul {
+  margin: 0;
+  padding-left: var(--space-5);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.managed-package-card__eyebrow {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.managed-packages-list {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.managed-package-summary__identity h3 {
+  margin: 0;
+  color: var(--color-text);
+}
+
+.managed-package-summary__source {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.package-status-chip {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  overflow-wrap: anywhere;
+}
+
+.package-status-chip[data-state="current"],
+.package-status-chip[data-state="enabled"],
+.package-status-chip[data-state="installed"] {
+  border-color: color-mix(in srgb, var(--color-accent) 60%, var(--color-border));
+  color: var(--color-accent);
+}
+
+.package-status-chip[data-state="conflict"],
+.package-status-chip[data-state="stale"],
+.package-status-chip[data-state="unresolved"],
+.package-status-chip[data-state="unsupported"],
+.package-status-chip[data-state="manual"],
+.package-status-chip[data-state="external-existing"] {
+  border-color: color-mix(in srgb, var(--color-warning) 60%, var(--color-border));
+  color: var(--color-warning);
+}
+
+.managed-package-summary__subsection {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.managed-package-summary__subsection h4 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+}
+
+.managed-package-summary__list {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding-left: var(--space-5);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.managed-package-summary__list li {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  overflow-wrap: anywhere;
+}
+
+.managed-package-summary__muted,
+.managed-package-summary__callout {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.managed-package-summary__secondary {
+  color: var(--color-text-muted);
+}
+
+.managed-package-summary__capabilities {
+  display: flex;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+}
+
+.package-capability-chip {
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.managed-package-summary__callout {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border-left: 2px solid var(--color-warning);
+}
+
+.managed-package-summary__callout code {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 560px) {
+  .package-context-card__lifecycle,
+  .package-context-card__metadata > div,
+  .managed-package-summary__field,
+  .managed-package-deployment-row__metadata,
+  .skill-detail__source-package-field {
+    grid-template-columns: 1fr;
+    gap: var(--space-1);
+  }
+
+  .package-context-card__actions,
+  .package-context-card__actions .action-pill,
+  .managed-package-deployment-row__actions,
+  .managed-package-deployment-row__actions .action-pill,
+  .managed-package-deployment-confirmation__replacement select {
+    width: 100%;
+  }
+
+  .skill-detail__source-package-component-header,
+  .skill-detail__source-package-list-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
 }
 
 }

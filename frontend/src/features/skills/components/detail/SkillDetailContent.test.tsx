@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { SkillDetail } from "../../model/types";
+import type { SkillPackageContextResponse } from "../../api/package-types";
 import { SkillDetailContent } from "./SkillDetailContent";
 
 const unmanagedDetail: SkillDetail = {
@@ -34,8 +35,43 @@ const unmanagedDetail: SkillDetail = {
   documentMarkdown: "## Usage\n\nInspect traces.",
 };
 
+const unresolvedPackageContext: SkillPackageContextResponse = {
+  packageBacked: true,
+  observation: null,
+  resolution: {
+    status: "unresolved",
+    source: null,
+    reason: "An authoritative source has not been resolved.",
+    limitations: [],
+    evidence: [],
+  },
+  managedPackage: null,
+};
+
 describe("SkillDetailContent", () => {
+  it('preserves existing standalone ownership when wider package context is discovered', () => {
+    const toggle = vi.fn();
+    render(<SkillDetailContent
+      detail={{ ...unmanagedDetail, displayStatus: 'Managed',
+        actions: {...unmanagedDetail.actions, canManage: false, canDelete: true},
+        harnessCells: [{harness: 'codex', label: 'Codex', state: 'enabled', interactive: true}],
+      }}
+      packageContext={{...unresolvedPackageContext,
+        resolution: {status: 'resolved', source: {kind: 'github', locator: 'github:mode-io/trace-lens', revision: 'a'.repeat(40)},
+          reason: null, limitations: [], evidence: []},
+      }}
+      actionErrorMessage="" queryErrorMessage="" pendingToggleHarnesses={new Set()} pendingStructuralAction={null}
+      onClose={vi.fn()} onDismissActionError={vi.fn()} onManage={vi.fn()} onManagePackage={vi.fn()}
+      onResolvePackage={vi.fn()} onToggleHarness={toggle} onUpdate={vi.fn()} onRequestRemove={vi.fn()} onRequestDelete={vi.fn()}
+    />);
+    fireEvent.click(screen.getByRole('button', {name: 'Disable Trace Lens for Codex'}));
+    expect(toggle).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('button', {name: 'Manage package'})).not.toBeInTheDocument();
+  });
+
   it("renders source links, keeps SKILL.md folded by default, omits status pills, and places review actions in the footer rail", async () => {
+    const resolve = vi.fn();
+    const manage = vi.fn();
     render(
       <SkillDetailContent
         detail={unmanagedDetail}
@@ -45,7 +81,9 @@ describe("SkillDetailContent", () => {
         pendingStructuralAction={null}
         onClose={vi.fn()}
         onDismissActionError={vi.fn()}
-        onManage={vi.fn()}
+          onManage={manage}
+         onManagePackage={vi.fn()}
+          onResolvePackage={resolve}
         onToggleHarness={vi.fn()}
         onUpdate={vi.fn()}
         onRequestRemove={vi.fn()}
@@ -74,6 +112,9 @@ describe("SkillDetailContent", () => {
     const footer = screen.getByLabelText("Skill actions");
     expect(footer).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add to Skill Manager" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', {name: 'Review package source'}));
+    expect(resolve).toHaveBeenCalledOnce();
+    expect(manage).not.toHaveBeenCalled();
     expect(
       screen.queryByText(/Shared Store is the canonical physical package/i),
     ).not.toBeInTheDocument();
@@ -112,7 +153,9 @@ describe("SkillDetailContent", () => {
         pendingStructuralAction={null}
         onClose={vi.fn()}
         onDismissActionError={vi.fn()}
-        onManage={vi.fn()}
+         onManage={vi.fn()}
+         onManagePackage={vi.fn()}
+         onResolvePackage={vi.fn()}
         onToggleHarness={vi.fn()}
         onUpdate={vi.fn()}
         onRequestRemove={vi.fn()}
@@ -163,7 +206,9 @@ describe("SkillDetailContent", () => {
         pendingStructuralAction={null}
         onClose={vi.fn()}
         onDismissActionError={vi.fn()}
-        onManage={vi.fn()}
+         onManage={vi.fn()}
+         onManagePackage={vi.fn()}
+         onResolvePackage={vi.fn()}
         onToggleHarness={vi.fn()}
         onUpdate={vi.fn()}
         onRequestRemove={vi.fn()}
@@ -177,5 +222,64 @@ describe("SkillDetailContent", () => {
     expect(screen.queryByLabelText("Skill actions")).not.toBeInTheDocument();
     expect(screen.queryByText("No Update Available")).not.toBeInTheDocument();
     expect(screen.queryByText("No Source Available")).not.toBeInTheDocument();
+  });
+
+  it("does not expose individual adoption while package context is still loading", () => {
+    render(
+      <SkillDetailContent
+        detail={unmanagedDetail}
+        isPackageContextLoading
+        actionErrorMessage=""
+        queryErrorMessage=""
+        pendingToggleHarnesses={new Set()}
+        pendingStructuralAction={null}
+        onClose={vi.fn()}
+        onDismissActionError={vi.fn()}
+         onManage={vi.fn()}
+         onManagePackage={vi.fn()}
+         onResolvePackage={vi.fn()}
+        onToggleHarness={vi.fn()}
+        onUpdate={vi.fn()}
+        onRequestRemove={vi.fn()}
+        onRequestDelete={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "Add to Skill Manager" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Skill actions")).not.toBeInTheDocument();
+    expect(screen.queryByText("Adopt this skill to manage it")).not.toBeInTheDocument();
+    expect(screen.getByText("Checking package source before showing individual controls.")).toBeInTheDocument();
+  });
+
+  it("does not expose individual controls for a package-backed skill", () => {
+    render(
+      <SkillDetailContent
+        detail={{
+          ...unmanagedDetail,
+          harnessCells: [
+            { harness: "claude", label: "Claude", state: "enabled", interactive: true },
+            { harness: "codex", label: "Codex", state: "found", interactive: false },
+          ],
+        }}
+        packageContext={unresolvedPackageContext}
+        actionErrorMessage=""
+        queryErrorMessage=""
+        pendingToggleHarnesses={new Set()}
+        pendingStructuralAction={null}
+        onClose={vi.fn()}
+        onDismissActionError={vi.fn()}
+        onManage={vi.fn()}
+        onManagePackage={vi.fn()}
+        onResolvePackage={vi.fn()}
+        onToggleHarness={vi.fn()}
+        onUpdate={vi.fn()}
+        onRequestRemove={vi.fn()}
+        onRequestDelete={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: /Disable Trace Lens for Claude/i })).not.toBeInTheDocument();
+    expect(screen.queryByText("Adopt this skill to manage it")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Manage this as a whole package. Individual component controls are unavailable.")).toHaveLength(2);
   });
 });

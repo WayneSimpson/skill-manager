@@ -237,6 +237,74 @@ class ManagedPackagesResponse(BaseModel):
     skills: dict[str, ManagedPackageSkillLink]
 
 
+PackageResolutionStatus = Literal["resolved", "unresolved", "ambiguous", "unavailable"]
+
+
+class PackageResolutionResponse(BaseModel):
+    status: PackageResolutionStatus
+    source: PackageSource | None
+    reason: str | None
+    limitations: list[str]
+    evidence: list[SourceEvidence]
+
+
+class SkillPackageContextResponse(BaseModel):
+    packageBacked: bool
+    observation: SkillSourcePackageResponse | None
+    resolution: PackageResolutionResponse | None
+    managedPackage: ManagedPackageResponse | None
+
+
+PackageHarness = Literal["claude", "codex", "cursor", "opencode"]
+PackageDeploymentAction = Literal["deploy", "enable", "disable", "remove", "update"]
+PackageDeploymentState = Literal[
+    "absent", "installed", "enabled", "disabled", "stale", "conflict",
+    "external-existing", "manual", "unsupported",
+]
+PackageDeploymentSupport = Literal["supported", "manual", "unsupported"]
+PackageDeploymentOwnership = Literal["absent", "managed", "external-existing", "conflict"]
+PackageDeploymentStrategy = Literal["native-local", "native-install", "manual/unsupported"]
+
+
+class PackageDeploymentActionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    action: PackageDeploymentAction
+    replacementPackageId: str | None = Field(
+        default=None,
+        min_length=64,
+        max_length=64,
+        pattern=r"[0-9a-f]{64}",
+    )
+
+
+class PackageReplacementOption(BaseModel):
+    packageId: str
+    source: PackageSource
+    label: str | None = None
+
+
+class PackageDeploymentHarnessResponse(BaseModel):
+    harness: PackageHarness
+    state: PackageDeploymentState
+    support: PackageDeploymentSupport
+    ownership: PackageDeploymentOwnership
+    strategy: PackageDeploymentStrategy
+    selectedPackageId: str | None
+    deploymentId: str | None
+    enabled: bool | None
+    blockers: list[str]
+    actions: list[PackageDeploymentAction]
+    preflight: list[str]
+    source: PackageSource | None = None
+    replacementOptions: list[PackageReplacementOption] = Field(default_factory=list)
+
+
+class PackageDeploymentsResponse(BaseModel):
+    packageId: str
+    harnesses: list[PackageDeploymentHarnessResponse]
+
+
 class SkillDetailResponse(BaseModel):
     skillRef: str
     name: str
@@ -258,6 +326,11 @@ class SkillSourceStatusResponse(BaseModel):
 __all__ = [
     "BulkManageFailureResponse",
     "BulkManageResultResponse",
+    "PackageDeploymentActionRequest",
+    "PackageDeploymentHarnessResponse",
+    "PackageDeploymentsResponse",
+    "PackageResolutionResponse",
+    "SkillPackageContextResponse",
     "DisableSkillRequest",
     "EnableSkillRequest",
     "HarnessCellResponse",

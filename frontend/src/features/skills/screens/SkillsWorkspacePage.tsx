@@ -17,6 +17,8 @@ export default function SkillsWorkspacePage() {
     queryErrorMessage,
     closeSelectedSkill,
     handleManageSkill,
+    handleManagePackage,
+    handleResolvePackage,
     handleToggleSkill,
     handleUpdateSkill,
     handleRemoveSkill,
@@ -67,6 +69,8 @@ export default function SkillsWorkspacePage() {
         pendingStructuralAction={selectedPendingStructuralAction}
         onClose={closeSelectedSkill}
         onManageSkill={handleManageSkill}
+        onManagePackage={handleManagePackage}
+        onResolvePackage={handleResolvePackage}
         onToggleSkill={handleToggleSkill}
         onUpdateSkill={handleUpdateSkill}
         onRemoveSkill={handleRemoveSkill}

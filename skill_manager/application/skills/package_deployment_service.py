@@ -61,10 +61,19 @@ class PackageDeploymentService:
         """Read current ownership; stored verification is only the last successful check."""
         with self._lock():
             existing = self._existing(self._load_state(), deployment_id)
-            _, plan = self._fresh_plan(existing['managedPackageId'], adapter, existing)
+            target, plan = self._fresh_plan(existing['managedPackageId'], adapter, existing)
+            verification = (self._verify(adapter, plan, 'present')
+                            if plan.support == 'supported' and plan.ownership == 'managed'
+                            else {'verified': False, 'enabled': None})
             verified = (plan.support == 'supported' and plan.ownership == 'managed'
-                        and self._verify(adapter, plan, 'present')['verified'])
-            return {'deployment': existing, 'plan': plan, 'state': 'managed' if verified else 'conflict'}
+                        and verification['verified'])
+            return {
+                'deployment': existing,
+                'target': target,
+                'plan': plan,
+                'verification': verification,
+                'state': 'managed' if verified else 'conflict',
+            }
 
     def _lock(self):
         if not self.packages.root.is_dir() or not _safe_path(self.packages.lock) or not _safe_path(self.state_path):
@@ -117,8 +126,12 @@ class PackageDeploymentService:
                 self._move_new_snapshot(stage, destination)
                 try:
                     if checked_plan.target_harness == 'codex':
+                        self._require_adapter_method(adapter, 'install', checked_plan, 'Native installation is unavailable.')
                         native_started = True
-                        adapter.install(checked_plan)
+                        try:
+                            adapter.install(checked_plan)
+                        except Exception as error:  # noqa: BLE001 - adapter is an external boundary
+                            raise PackageDeploymentError('Native installation failed.', plan=checked_plan) from error
                     verification = self._verify(adapter, checked_plan, 'present')
                     if package_fingerprint(destination) != target_fingerprint or _identity(destination) != staged_identity:
                         raise PackageDeploymentError('Placed target changed during verification.', plan=checked_plan)
@@ -209,9 +222,17 @@ class PackageDeploymentService:
                     raise
                 try:
                     if plan.target_harness == 'codex':
-                        adapter.reinstall(plan)
+                        self._require_adapter_method(adapter, 'reinstall', plan, 'Native update is unavailable.')
+                        try:
+                            adapter.reinstall(plan)
+                        except Exception as error:  # noqa: BLE001 - adapter is an external boundary
+                            raise PackageDeploymentError('Native update failed.', plan=plan) from error
                         if before_native['enabled'] is False:
-                            adapter.set_enabled(plan, False)
+                            self._require_adapter_method(adapter, 'set_enabled', plan, 'Native enable state cannot be restored.')
+                            try:
+                                adapter.set_enabled(plan, False)
+                            except Exception as error:  # noqa: BLE001 - adapter is an external boundary
+                                raise PackageDeploymentError('Native enable state could not be restored.', plan=plan) from error
                     verification = self._verify(adapter, plan, 'present')
                     if package_fingerprint(destination) != target_fingerprint or _identity(destination) != staged_identity:
                         raise PackageDeploymentError('Replacement changed during verification.', plan=plan)
@@ -274,8 +295,12 @@ class PackageDeploymentService:
             self._same_target(plan, checked_plan, checked_target)
             destination = self._planned_destination(checked_plan)
             self._prove_target(destination, existing)
-            if plan.target_harness == 'codex':
-                adapter.uninstall(checked_plan)
+            if checked_plan.target_harness == 'codex':
+                self._require_adapter_method(adapter, 'uninstall', checked_plan, 'Native removal is unavailable.')
+                try:
+                    adapter.uninstall(checked_plan)
+                except Exception as error:  # noqa: BLE001 - adapter is an external boundary
+                    raise PackageDeploymentError('Native removal failed.', plan=checked_plan) from error
             shutil.rmtree(destination)
             verification = self._verify(adapter, checked_plan, 'absent')
             if not verification['verified']:
@@ -338,8 +363,8 @@ class PackageDeploymentService:
             self._prove_target(self._planned_destination(checked_plan), existing)
             try:
                 setter(checked_plan, enabled)
-            except (NotImplementedError, AttributeError) as error:
-                raise PackageDeploymentError('This native adapter has no verified enable/disable control.', plan=checked_plan) from error
+            except Exception as error:  # noqa: BLE001 - adapter is an external boundary
+                raise PackageDeploymentError('Native enable/disable operation failed.', plan=checked_plan) from error
             verification = self._verify(adapter, checked_plan, 'enabled' if enabled else 'disabled')
             if not verification['verified']:
                 raise PackageDeploymentError('Native enable/disable verification failed.', plan=checked_plan)
@@ -369,6 +394,11 @@ class PackageDeploymentService:
             raise PackageDeploymentError(f'Native package deployment is blocked: {reason}', plan=plan)
         if managed and plan.ownership != 'managed':
             raise PackageDeploymentError('Managed target ownership is not proven.', plan=plan)
+
+    @staticmethod
+    def _require_adapter_method(adapter, method: str, plan: PackageDeploymentPlan, message: str) -> None:
+        if not callable(getattr(adapter, method, None)):
+            raise PackageDeploymentError(message, plan=plan)
 
     def _selected_artifact(self, plan: PackageDeploymentPlan) -> tuple[Path, str]:
         if plan.selected_package_id is None or plan.fingerprint is None:

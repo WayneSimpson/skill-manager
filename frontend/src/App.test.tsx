@@ -127,6 +127,7 @@ describe("App shell", () => {
     ["/overview", "Overview"],
     ["/skills/use", "Skills in use"],
     ["/skills/review", "Skills to review"],
+    ["/skills/packages", "Managed packages"],
     ["/scan-config", "Scan Config"],
     ["/slash-commands", "Slash Commands"],
     ["/slash-commands/use", "Slash Commands"],

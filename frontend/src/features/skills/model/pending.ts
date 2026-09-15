@@ -1,5 +1,5 @@
 export type CellActionKey = string;
-export type StructuralSkillAction = "manage" | "update" | "unmanage" | "delete";
+export type StructuralSkillAction = "resolve" | "manage" | "update" | "unmanage" | "delete";
 export type BulkSkillsAction = "manage-all";
 
 const CELL_ACTION_SEPARATOR = "\u0000";
