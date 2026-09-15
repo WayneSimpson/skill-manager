@@ -521,6 +521,39 @@
         "title": "DisableSkillRequest",
         "type": "object"
       },
+      "DistributionRelationship": {
+        "properties": {
+          "evidence": {
+            "title": "Evidence",
+            "type": "string"
+          },
+          "harness": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness"
+          },
+          "relationship": {
+            "title": "Relationship",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/PackageSource"
+          }
+        },
+        "required": [
+          "source",
+          "relationship",
+          "evidence"
+        ],
+        "title": "DistributionRelationship",
+        "type": "object"
+      },
       "EnableMcpServerRequest": {
         "properties": {
           "config": {
@@ -710,6 +743,266 @@
           "hasAnyAvailable"
         ],
         "title": "LLMDetectionResponse",
+        "type": "object"
+      },
+      "ManagedPackageResponse": {
+        "properties": {
+          "artifactRoot": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifactroot"
+          },
+          "artifactState": {
+            "enum": [
+              "current",
+              "changed",
+              "missing",
+              "unavailable",
+              "not-retained"
+            ],
+            "title": "Artifactstate",
+            "type": "string"
+          },
+          "candidateSource": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PackageSource"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "capabilities": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RetainedPackageCapabilities"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "distributions": {
+            "items": {
+              "$ref": "#/components/schemas/DistributionRelationship"
+            },
+            "title": "Distributions",
+            "type": "array"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/SourceEvidence"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "fingerprint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fingerprint"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "observations": {
+            "items": {
+              "$ref": "#/components/schemas/PackageExternalObservation"
+            },
+            "title": "Observations",
+            "type": "array"
+          },
+          "ownership": {
+            "const": "skill-manager",
+            "title": "Ownership",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "resolutionStatus": {
+            "enum": [
+              "resolved",
+              "unresolved",
+              "unavailable",
+              "ambiguous"
+            ],
+            "title": "Resolutionstatus",
+            "type": "string"
+          },
+          "skillRefs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Skillrefs",
+            "type": "array"
+          },
+          "source": {
+            "$ref": "#/components/schemas/PackageSource"
+          },
+          "state": {
+            "enum": [
+              "current",
+              "changed",
+              "missing",
+              "unavailable",
+              "unresolved",
+              "ambiguous"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "upstreamState": {
+            "enum": [
+              "current",
+              "changed",
+              "unresolved",
+              "unavailable",
+              "ambiguous"
+            ],
+            "title": "Upstreamstate",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "ownership",
+          "source",
+          "fingerprint",
+          "capabilities",
+          "evidence",
+          "distributions",
+          "limitations",
+          "resolutionStatus",
+          "upstreamState",
+          "candidateSource",
+          "reason",
+          "artifactRoot",
+          "artifactState",
+          "state",
+          "skillRefs",
+          "observations"
+        ],
+        "title": "ManagedPackageResponse",
+        "type": "object"
+      },
+      "ManagedPackageSkillLink": {
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "observations": {
+            "items": {
+              "$ref": "#/components/schemas/PackageExternalObservation"
+            },
+            "title": "Observations",
+            "type": "array"
+          },
+          "packageId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Packageid"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "resolutionStatus": {
+            "enum": [
+              "resolved",
+              "unresolved",
+              "unavailable",
+              "ambiguous"
+            ],
+            "title": "Resolutionstatus",
+            "type": "string"
+          },
+          "sourceSkillPath": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sourceskillpath"
+          }
+        },
+        "required": [
+          "packageId",
+          "name",
+          "resolutionStatus",
+          "reason",
+          "observations"
+        ],
+        "title": "ManagedPackageSkillLink",
+        "type": "object"
+      },
+      "ManagedPackagesResponse": {
+        "properties": {
+          "packages": {
+            "items": {
+              "$ref": "#/components/schemas/ManagedPackageResponse"
+            },
+            "title": "Packages",
+            "type": "array"
+          },
+          "skills": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ManagedPackageSkillLink"
+            },
+            "title": "Skills",
+            "type": "object"
+          }
+        },
+        "required": [
+          "packages",
+          "skills"
+        ],
+        "title": "ManagedPackagesResponse",
         "type": "object"
       },
       "MarketplaceInstallationResponse": {
@@ -2915,6 +3208,60 @@
         "title": "PackageComponentResponse",
         "type": "object"
       },
+      "PackageExternalObservation": {
+        "properties": {
+          "harness": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness"
+          },
+          "ownership": {
+            "const": "external-existing",
+            "title": "Ownership",
+            "type": "string"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "enum": [
+                  "present",
+                  "missing",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          }
+        },
+        "required": [
+          "harness",
+          "path",
+          "ownership"
+        ],
+        "title": "PackageExternalObservation",
+        "type": "object"
+      },
       "PackageManifestResponse": {
         "properties": {
           "evidence": {
@@ -2942,6 +3289,105 @@
           "evidence"
         ],
         "title": "PackageManifestResponse",
+        "type": "object"
+      },
+      "PackageSource": {
+        "properties": {
+          "artifact_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifact Url"
+          },
+          "integrity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Integrity"
+          },
+          "kind": {
+            "enum": [
+              "github",
+              "npm"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "locator": {
+            "title": "Locator",
+            "type": "string"
+          },
+          "package_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Package Path"
+          },
+          "ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "skill_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skill Path"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "kind",
+          "locator"
+        ],
+        "title": "PackageSource",
         "type": "object"
       },
       "ReconcileMcpServerRequest": {
@@ -2985,6 +3431,71 @@
           "sourceKind"
         ],
         "title": "ReconcileMcpServerRequest",
+        "type": "object"
+      },
+      "RetainedPackageCapabilities": {
+        "properties": {
+          "components": {
+            "items": {
+              "$ref": "#/components/schemas/PackageComponentResponse"
+            },
+            "title": "Components",
+            "type": "array"
+          },
+          "diagnostics": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Diagnostics",
+            "type": "array"
+          },
+          "evidence": {
+            "enum": [
+              "declared_standard",
+              "declared_harness_manifest",
+              "verified_convention",
+              "unresolved"
+            ],
+            "title": "Evidence",
+            "type": "string"
+          },
+          "manifests": {
+            "items": {
+              "$ref": "#/components/schemas/PackageManifestResponse"
+            },
+            "title": "Manifests",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "name",
+          "version",
+          "evidence",
+          "manifests",
+          "components",
+          "diagnostics",
+          "revision"
+        ],
+        "title": "RetainedPackageCapabilities",
         "type": "object"
       },
       "ScanAvailabilityResponse": {
@@ -4935,6 +5446,28 @@
         "title": "SlashTargetResponse",
         "type": "object"
       },
+      "SourceEvidence": {
+        "properties": {
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "location": {
+            "title": "Location",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/PackageSource"
+          }
+        },
+        "required": [
+          "kind",
+          "location",
+          "source"
+        ],
+        "title": "SourceEvidence",
+        "type": "object"
+      },
       "SourcePackageResponse": {
         "properties": {
           "components": {
@@ -6639,6 +7172,63 @@
         "summary": "Manage All Skills"
       }
     },
+    "/api/skills/managed-packages": {
+      "get": {
+        "operationId": "list_managed_packages_api_skills_managed_packages_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagedPackagesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Managed Packages"
+      }
+    },
+    "/api/skills/managed-packages/{package_id}/refresh": {
+      "post": {
+        "operationId": "refresh_managed_package_api_skills_managed_packages__package_id__refresh_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "package_id",
+            "required": true,
+            "schema": {
+              "title": "Package Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagedPackageResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Refresh Managed Package"
+      }
+    },
     "/api/skills/source-packages": {
       "get": {
         "operationId": "list_source_packages_api_skills_source_packages_get",
@@ -6870,6 +7460,45 @@
           }
         },
         "summary": "Manage Skill"
+      }
+    },
+    "/api/skills/{skill_ref}/manage-package": {
+      "post": {
+        "operationId": "manage_source_package_api_skills__skill_ref__manage_package_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "skill_ref",
+            "required": true,
+            "schema": {
+              "title": "Skill Ref",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagedPackageResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Manage Source Package"
       }
     },
     "/api/skills/{skill_ref}/set-harnesses": {

@@ -10,12 +10,15 @@ from skill_manager.sources import github_folder_url, github_repo_from_locator, g
 from .document_utils import read_skill_document_markdown
 from .inventory import InventoryEntry, SkillInventory
 from .package import fingerprint_package
-from .policy import can_stop_managing, can_update, has_local_changes
+from .policy import can_stop_managing, can_update, has_local_changes, sort_entries
 from .presenters import skill_detail_payload, skills_page_payload, source_status_payload
 from .read_models import SkillsReadModelService
 from .source_fetch import SourceFetchService
 from .source_package import SourcePackageDiscovery
 from .package_resolution import PackageResolution, PackageSourceResolver
+from .package_resolution import PackageSource
+from .identity import SourceDescriptor
+from .managed_packages import ManagedPackageStore
 
 
 class SkillsQueryService:
@@ -26,6 +29,25 @@ class SkillsQueryService:
     ) -> None:
         self.read_models = read_models
         self.source_fetcher = source_fetcher
+        self.managed_packages = ManagedPackageStore(read_models.store.root.parent / 'packages')
+
+    def list_managed_packages(self) -> dict[str, object]:
+        return {'packages': self.managed_packages.list(), 'skills': self.managed_packages.links()}
+
+    def refresh_managed_package(self, package_id: str) -> dict:
+        record = self.managed_packages.get(package_id)
+        inventory = self.inventory()
+        entry = next((inventory.find(ref) for ref in record['skillRefs'] if inventory.find(ref)), None)
+        with TemporaryDirectory(prefix='package-refresh-') as directory:
+            if entry is not None:
+                resolution = self.resolve_package_source(entry.skill_ref, work_dir=Path(directory))
+            else:
+                source = PackageSource(**record['source'])
+                ref = record['skillRefs'][0] if record['skillRefs'] else package_id
+                retained = InventoryEntry(ref, '', '', 'unmanaged', SourceDescriptor(source.kind, source.locator))
+                resolution = PackageSourceResolver(self.source_fetcher).resolve(
+                    retained, work_dir=Path(directory), authoritative_source=source)
+            return self.managed_packages.record_refresh(package_id, resolution, retained_only=entry is None)
 
     def health(self) -> dict[str, object]:
         snapshot = self.read_models.snapshot()
@@ -71,6 +93,9 @@ class SkillsQueryService:
         resolver = PackageSourceResolver(self.source_fetcher, stop_paths=(self.read_models.store.root,))
         return resolver.resolve(self.require_entry(skill_ref), work_dir=work_dir)
 
+    def has_package_provenance(self, entry: InventoryEntry) -> bool:
+        return PackageSourceResolver(self.source_fetcher, stop_paths=(self.read_models.store.root,)).has_package_provenance(entry)
+
     def _package_discovery(self) -> SourcePackageDiscovery:
         # Fresh per request: source manifests can change outside the inventory cache.
         return SourcePackageDiscovery(stop_paths=(self.read_models.store.root,))
@@ -113,11 +138,20 @@ class SkillsQueryService:
 
     def inventory(self) -> SkillInventory:
         snapshot = self.read_models.snapshot()
-        return SkillInventory.from_snapshot(
+        inventory = SkillInventory.from_snapshot(
             store_scan=snapshot.store_scan,
             harness_scans=self.read_models.visible_scans(snapshot),
             runtime_skills=snapshot.runtime_skills,
         )
+        links = self.managed_packages.links()
+        for entry in inventory.entries:
+            link = links.get(entry.skill_ref)
+            if link:
+                entry.managed_package_id = link.get('packageId')
+        entries = list(inventory.entries)
+        sort_entries(entries)
+        inventory.entries = tuple(entries)
+        return inventory
 
     def require_entry(self, skill_ref: str) -> InventoryEntry:
         entry = self.inventory().find(skill_ref)

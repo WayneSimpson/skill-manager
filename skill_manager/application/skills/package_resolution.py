@@ -146,12 +146,30 @@ class PackageSourceResolver:
         self.fetcher = source_fetcher or SourceFetchService()
         self.stop_paths = tuple(p.resolve() for p in stop_paths)
 
-    def resolve(self, entry: InventoryEntry, *, work_dir: Path) -> PackageResolution:
+    def has_package_provenance(self, entry: InventoryEntry) -> bool:
+        """Local-only routing hint; acquisition still requires a full resolution."""
+        if entry.runtime_only and entry.runtime_materialize_path is None:
+            return False
+        if entry.source_path is None:
+            paths = {item.path for item in entry.sightings if item.path is not None}
+            if len(paths) > 1:
+                return any(self.has_package_provenance(replace(entry, source_path=str(path))) for path in paths)
+        evidence, _ = self._evidence(entry)
+        return any(item.kind in ('package_repository', 'native_coordinate', 'npm_lock', 'npm_lock_git')
+                   for item in evidence)
+
+    def resolve(self, entry: InventoryEntry, *, work_dir: Path,
+                authoritative_source: PackageSource | None = None) -> PackageResolution:
         """Artifacts survive until caller removes work_dir. Failure removes only our own scratch directory."""
         result = PackageResolution('unresolved', entry.skill_ref)
         scratch = None
         try:
-            evidence, local = self._evidence(entry)
+            if authoritative_source is not None:
+                if not authoritative_source.revision:
+                    raise ValueError('Retained source requires an exact revision')
+                evidence, local = [SourceEvidence('retained_source', 'managed-package', authoritative_source)], None
+            else:
+                evidence, local = self._evidence(entry)
             result.evidence = tuple(evidence)
             if not evidence:
                 result.reason = 'No deterministic upstream source evidence; names are not source authority.'

@@ -620,6 +620,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/skills/managed-packages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Managed Packages */
+        get: operations["list_managed_packages_api_skills_managed_packages_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/skills/managed-packages/{package_id}/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Refresh Managed Package */
+        post: operations["refresh_managed_package_api_skills_managed_packages__package_id__refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/skills/source-packages": {
         parameters: {
             query?: never;
@@ -716,6 +750,23 @@ export interface paths {
         put?: never;
         /** Manage Skill */
         post: operations["manage_skill_api_skills__skill_ref__manage_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/skills/{skill_ref}/manage-package": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Manage Source Package */
+        post: operations["manage_source_package_api_skills__skill_ref__manage_package_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1032,6 +1083,16 @@ export interface components {
              */
             harness: string;
         };
+        /** DistributionRelationship */
+        DistributionRelationship: {
+            /** Evidence */
+            evidence: string;
+            /** Harness */
+            harness?: string | null;
+            /** Relationship */
+            relationship: string;
+            source: components["schemas"]["PackageSource"];
+        };
         /** EnableMcpServerRequest */
         EnableMcpServerRequest: {
             /** Config */
@@ -1099,6 +1160,82 @@ export interface components {
             hasAnyAvailable: boolean;
             /** Providers */
             providers: components["schemas"]["DetectedProviderResponse"][];
+        };
+        /** ManagedPackageResponse */
+        ManagedPackageResponse: {
+            /** Artifactroot */
+            artifactRoot: string | null;
+            /**
+             * Artifactstate
+             * @enum {string}
+             */
+            artifactState: "current" | "changed" | "missing" | "unavailable" | "not-retained";
+            candidateSource: components["schemas"]["PackageSource"] | null;
+            capabilities: components["schemas"]["RetainedPackageCapabilities"] | null;
+            /** Distributions */
+            distributions: components["schemas"]["DistributionRelationship"][];
+            /** Evidence */
+            evidence: components["schemas"]["SourceEvidence"][];
+            /** Fingerprint */
+            fingerprint: string | null;
+            /** Id */
+            id: string;
+            /** Limitations */
+            limitations: string[];
+            /** Observations */
+            observations: components["schemas"]["PackageExternalObservation"][];
+            /**
+             * Ownership
+             * @constant
+             */
+            ownership: "skill-manager";
+            /** Reason */
+            reason: string | null;
+            /**
+             * Resolutionstatus
+             * @enum {string}
+             */
+            resolutionStatus: "resolved" | "unresolved" | "unavailable" | "ambiguous";
+            /** Skillrefs */
+            skillRefs: string[];
+            source: components["schemas"]["PackageSource"];
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "current" | "changed" | "missing" | "unavailable" | "unresolved" | "ambiguous";
+            /**
+             * Upstreamstate
+             * @enum {string}
+             */
+            upstreamState: "current" | "changed" | "unresolved" | "unavailable" | "ambiguous";
+        };
+        /** ManagedPackageSkillLink */
+        ManagedPackageSkillLink: {
+            /** Name */
+            name: string;
+            /** Observations */
+            observations: components["schemas"]["PackageExternalObservation"][];
+            /** Packageid */
+            packageId: string | null;
+            /** Reason */
+            reason: string | null;
+            /**
+             * Resolutionstatus
+             * @enum {string}
+             */
+            resolutionStatus: "resolved" | "unresolved" | "unavailable" | "ambiguous";
+            /** Sourceskillpath */
+            sourceSkillPath?: string | null;
+        };
+        /** ManagedPackagesResponse */
+        ManagedPackagesResponse: {
+            /** Packages */
+            packages: components["schemas"]["ManagedPackageResponse"][];
+            /** Skills */
+            skills: {
+                [key: string]: components["schemas"]["ManagedPackageSkillLink"];
+            };
         };
         /** MarketplaceInstallationResponse */
         MarketplaceInstallationResponse: {
@@ -1798,6 +1935,20 @@ export interface components {
              */
             supported: boolean;
         };
+        /** PackageExternalObservation */
+        PackageExternalObservation: {
+            /** Harness */
+            harness: string | null;
+            /**
+             * Ownership
+             * @constant
+             */
+            ownership: "external-existing";
+            /** Path */
+            path: string | null;
+            /** State */
+            state?: ("present" | "missing" | "unknown") | null;
+        };
         /** PackageManifestResponse */
         PackageManifestResponse: {
             /**
@@ -1810,6 +1961,30 @@ export interface components {
             /** Path */
             path: string;
         };
+        /** PackageSource */
+        PackageSource: {
+            /** Artifact Url */
+            artifact_url?: string | null;
+            /** Integrity */
+            integrity?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "github" | "npm";
+            /** Locator */
+            locator: string;
+            /** Package Path */
+            package_path?: string | null;
+            /** Ref */
+            ref?: string | null;
+            /** Revision */
+            revision?: string | null;
+            /** Skill Path */
+            skill_path?: string | null;
+            /** Version */
+            version?: string | null;
+        };
         /** ReconcileMcpServerRequest */
         ReconcileMcpServerRequest: {
             /** Harnesses */
@@ -1821,6 +1996,26 @@ export interface components {
              * @enum {string}
              */
             sourceKind: "managed" | "harness";
+        };
+        /** RetainedPackageCapabilities */
+        RetainedPackageCapabilities: {
+            /** Components */
+            components: components["schemas"]["PackageComponentResponse"][];
+            /** Diagnostics */
+            diagnostics: string[];
+            /**
+             * Evidence
+             * @enum {string}
+             */
+            evidence: "declared_standard" | "declared_harness_manifest" | "verified_convention" | "unresolved";
+            /** Manifests */
+            manifests: components["schemas"]["PackageManifestResponse"][];
+            /** Name */
+            name: string;
+            /** Revision */
+            revision: string;
+            /** Version */
+            version: string | null;
         };
         /** ScanAvailabilityResponse */
         ScanAvailabilityResponse: {
@@ -2486,6 +2681,14 @@ export interface components {
             supportNote?: string | null;
             /** Supportsfrontmatter */
             supportsFrontmatter: boolean;
+        };
+        /** SourceEvidence */
+        SourceEvidence: {
+            /** Kind */
+            kind: string;
+            /** Location */
+            location: string;
+            source: components["schemas"]["PackageSource"];
         };
         /** SourcePackageResponse */
         SourcePackageResponse: {
@@ -3720,6 +3923,57 @@ export interface operations {
             };
         };
     };
+    list_managed_packages_api_skills_managed_packages_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedPackagesResponse"];
+                };
+            };
+        };
+    };
+    refresh_managed_package_api_skills_managed_packages__package_id__refresh_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                package_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedPackageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_source_packages_api_skills_source_packages_get: {
         parameters: {
             query?: never;
@@ -3890,6 +4144,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OkResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    manage_source_package_api_skills__skill_ref__manage_package_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                skill_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedPackageResponse"];
                 };
             };
             /** @description Validation Error */

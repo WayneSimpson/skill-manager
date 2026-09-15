@@ -20,35 +20,45 @@ def has_local_changes(entry: InventoryEntry) -> bool:
 
 
 def display_status(entry: InventoryEntry) -> DisplayStatus:
+    if entry.managed_package_id:
+        return "Managed"
     if entry.kind == "unmanaged":
         return "Unmanaged"
     return "Managed"
 
 
 def attention_message(entry: InventoryEntry) -> str | None:
+    if entry.managed_package_id:
+        return "Whole package managed centrally. Existing native installations remain external; native deployment is not available yet."
     if has_local_changes(entry):
         return "Local changes detected. Source updates are disabled."
     return None
 
 
 def can_manage(entry: InventoryEntry) -> bool:
-    return entry.kind == "unmanaged" and entry.can_manage_reason is None
+    return entry.kind == "unmanaged" and not entry.managed_package_id and entry.can_manage_reason is None
 
 
 def can_update(entry: InventoryEntry) -> bool:
+    if entry.managed_package_id:
+        return False
     return entry.kind == "managed" and not has_local_changes(entry) and entry.source.kind == "github"
 
 
 def can_delete(entry: InventoryEntry) -> bool:
+    if entry.managed_package_id:
+        return False
     return entry.kind == "managed" and entry.package_dir is not None and entry.package_path is not None
 
 
 def can_stop_managing(entry: InventoryEntry) -> bool:
+    if entry.managed_package_id:
+        return False
     return entry.kind == "managed" and entry.package_dir is not None and entry.package_path is not None
 
 
 def cell_state(entry: InventoryEntry, harness: str) -> HarnessCellState:
-    if entry.kind == "unmanaged":
+    if entry.kind == "unmanaged" or entry.managed_package_id:
         return "found" if any(s.harness == harness for s in entry.sightings) else "empty"
     return (
         "enabled"

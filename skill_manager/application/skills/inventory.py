@@ -54,6 +54,7 @@ class InventoryEntry:
     runtime_slash: object | None = None
     can_manage_reason: str | None = None
     sightings: list[InventorySighting] = field(default_factory=list)
+    managed_package_id: str | None = None
 
     def add_sighting(self, sighting: InventorySighting) -> None:
         self.sightings.append(sighting)

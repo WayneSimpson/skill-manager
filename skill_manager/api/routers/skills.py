@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from skill_manager.application import BackendContainer
 from skill_manager.api.deps import get_container
-from skill_manager.api.schemas.skills import SourcePackagesResponse
+from skill_manager.api.schemas.skills import SourcePackagesResponse, ManagedPackagesResponse, ManagedPackageResponse
 from skill_manager.api.schemas import (
     BulkManageResultResponse,
     DisableSkillRequest,
@@ -28,6 +28,24 @@ def list_skills(container: BackendContainer = Depends(get_container)) -> dict[st
 @router.get("/source-packages", response_model=SourcePackagesResponse)
 def list_source_packages(container: BackendContainer = Depends(get_container)) -> dict[str, object]:
     return container.skills_queries.list_source_packages()
+
+
+@router.get('/managed-packages', response_model=ManagedPackagesResponse)
+def list_managed_packages(container: BackendContainer = Depends(get_container)):
+    return container.skills_queries.list_managed_packages()
+
+
+@router.post('/managed-packages/{package_id}/refresh', response_model=ManagedPackageResponse)
+def refresh_managed_package(package_id: str, container: BackendContainer = Depends(get_container)):
+    try:
+        return container.skills_queries.refresh_managed_package(package_id)
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@router.post('/{skill_ref:path}/manage-package', response_model=ManagedPackageResponse)
+def manage_source_package(skill_ref: str, container: BackendContainer = Depends(get_container)):
+    return container.skills_mutations.manage_source_package(skill_ref)
 
 
 @router.get("/{skill_ref:path}/source-status", response_model=SkillSourceStatusResponse)

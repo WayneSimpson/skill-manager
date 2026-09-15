@@ -20,6 +20,10 @@ _EXCLUDED = frozenset({'.git', 'node_modules', '.cache', '__pycache__', '.npmrc'
                        '.ssh', '.aws', '.azure', '.venv', '.env', '.netrc'})
 
 
+def excluded_source_part(name: str) -> bool:
+    return name in _EXCLUDED or name.startswith('.env') or name.endswith(('.pem', '.key'))
+
+
 def public_url(url: str) -> str:
     if not isinstance(url, str):
         raise ValueError('Invalid source URL')
@@ -119,7 +123,7 @@ def _extract_source(data: bytes, destination: Path, *, kind: str) -> None:
                 if not directory:
                     raise ValueError('Missing source archive wrapper')
                 continue
-            if any(p in _EXCLUDED or p.startswith('.env.') or p.endswith(('.pem', '.key')) for p in parts[1:]):
+            if any(excluded_source_part(p) for p in parts[1:]):
                 continue
             safe.append((Path(*parts[1:]), directory, size, mode, item))
         if len(roots) != 1:

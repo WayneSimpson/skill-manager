@@ -5,9 +5,22 @@ from unittest.mock import patch
 
 from skill_manager.application.skills.runtime import RuntimeSkillRecord
 from skill_manager.application.skills.source_package import SourcePackageDiscovery
+from skill_manager.application.skills.package_resolution import PackageResolution, PackageSource
 from tests.integration.test_opencode_runtime_skills_api import _RuntimeClient
 from tests.support.app_harness import AppTestHarness
 from tests.support.fake_home import seed_skill_package
+
+
+def authoritative_fixture(skill_ref, *, work_dir):
+    root = work_dir / 'upstream'
+    for name in ('configured', 'first', 'second'):
+        seed_skill_package(root / 'skills', name, name.title())
+    (root / 'plugin.json').write_text(json.dumps({
+        '$schema': 'https://agent-plugins.org/schemas/1.0.0/plugin.schema.json', 'name': 'upstream',
+    }))
+    return PackageResolution('resolved', skill_ref,
+        source=PackageSource('github', 'github:example/upstream', revision='a' * 40, package_path='.'),
+        artifact_root=root, capabilities=SourcePackageDiscovery().inspect_root(root)['package'])
 
 
 class SourcePackageApiTests(unittest.TestCase):
@@ -26,7 +39,8 @@ class SourcePackageApiTests(unittest.TestCase):
             row = harness.get_json("/api/skills")["rows"][0]
             before = harness.get_json(f"/api/skills/{row['skillRef']}")["sourcePackage"]
             self.assertEqual(before["status"], "resolved")
-            harness.post_json(f"/api/skills/{row['skillRef']}/manage")
+            with patch.object(harness.container.skills_queries, 'resolve_package_source', side_effect=authoritative_fixture):
+                harness.post_json(f"/api/skills/{row['skillRef']}/manage")
             row = harness.get_json("/api/skills")["rows"][0]
             after = harness.get_json(f"/api/skills/{row['skillRef']}")["sourcePackage"]
             self.assertEqual(after["status"], "resolved")
@@ -70,12 +84,14 @@ class SourcePackageApiTests(unittest.TestCase):
             self.assertEqual(detail["sourceKind"], "runtime")
             self.assertNotEqual(detail["sourceRevision"], detail["package"]["revision"])
 
-            harness.post_json(f"/api/skills/{row['skillRef']}/manage")
+            with patch.object(harness.container.skills_queries, 'resolve_package_source', side_effect=authoritative_fixture):
+                harness.post_json(f"/api/skills/{row['skillRef']}/manage")
             managed = next(s for s in harness.get_json("/api/skills")["rows"] if s["name"] == "First")
             adopted = harness.get_json(f"/api/skills/{managed['skillRef']}")["sourcePackage"]
             self.assertEqual(adopted["package"]["id"], package_id)
             self.assertEqual(adopted["sourcePath"], str(first))
-            harness.post_json(f"/api/skills/{managed['skillRef']}/enable", {"harness": "claude"})
+            # Task05 owns the whole package; never recreate a leaf deployment.
+            harness.post_json(f"/api/skills/{managed['skillRef']}/enable", {"harness": "claude"}, expected_status=409)
             self.assertEqual(len(client.calls), 1)
 
             # Capability reads do not retain the inventory's one-second cache.

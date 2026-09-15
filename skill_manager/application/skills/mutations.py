@@ -36,6 +36,7 @@ class SkillsMutationService:
 
     def enable_skill(self, skill_ref: str, harness: str) -> dict[str, bool]:
         entry = self.queries.require_entry(skill_ref)
+        self._require_standalone(entry)
         if entry.kind != "managed":
             raise MutationError(f"only managed skills can be toggled; this is {display_status(entry)}", status=400)
         if entry.package_path is None:
@@ -47,6 +48,7 @@ class SkillsMutationService:
 
     def disable_skill(self, skill_ref: str, harness: str) -> dict[str, bool]:
         entry = self.queries.require_entry(skill_ref)
+        self._require_standalone(entry)
         if entry.kind != "managed":
             raise MutationError(f"only managed skills can be toggled; this is {display_status(entry)}", status=400)
         if entry.package_dir is None:
@@ -60,6 +62,7 @@ class SkillsMutationService:
         if target not in ("enabled", "disabled"):
             raise MutationError("target must be 'enabled' or 'disabled'", status=400)
         entry = self.queries.require_entry(skill_ref)
+        self._require_standalone(entry)
         if entry.kind != "managed":
             raise MutationError(
                 f"only managed skills can be toggled; this is {display_status(entry)}",
@@ -110,6 +113,29 @@ class SkillsMutationService:
         self._manage_entry(entry)
         self.read_models.invalidate()
         return {"ok": True}
+
+    def manage_source_package(self, skill_ref: str) -> dict:
+        """Explicit whole-package Adopt, including observations lacking local manifests."""
+        entry = self.queries.require_entry(skill_ref)
+        if entry.kind == 'managed' and not entry.managed_package_id:
+            raise MutationError('Existing standalone management is not migrated by package Adopt.', status=409)
+        observations = [{
+            'harness': item.harness, 'path': str(item.path) if item.path else None,
+            'ownership': 'external-existing',
+        } for item in entry.sightings if item.kind == 'harness']
+        with TemporaryDirectory(prefix='package-adopt-') as directory:
+            resolution = self.queries.resolve_package_source(skill_ref, work_dir=Path(directory))
+            try:
+                record = self.queries.managed_packages.adopt(resolution, name=entry.name, observations=observations)
+            except ValueError as error:
+                raise MutationError(str(error), status=409) from error
+        self.read_models.invalidate()
+        return record
+
+    @staticmethod
+    def _require_standalone(entry: InventoryEntry) -> None:
+        if entry.managed_package_id:
+            raise MutationError('Whole-package native deployment is not available; individual-skill fallback is disabled.', status=409)
 
     def manage_all_skills(self) -> dict[str, object]:
         inventory = self.queries.inventory()
@@ -263,6 +289,16 @@ class SkillsMutationService:
         return {"ok": True}
 
     def _manage_entry(self, entry: InventoryEntry) -> None:
+        if entry.managed_package_id:
+            return
+        local_package = self.queries._source_package(entry, self.queries._package_discovery())
+        try:
+            package_backed = local_package['status'] == 'resolved' or self.queries.has_package_provenance(entry)
+        except (OSError, ValueError, RuntimeError) as error:
+            raise MutationError('Package provenance cannot be read safely.', status=409) from error
+        if package_backed or entry.skill_ref in self.queries.managed_packages.links():
+            self.manage_source_package(entry.skill_ref)
+            return
         harness_sightings = [s for s in entry.sightings if s.kind == "harness"]
         source_path = (
             entry.runtime_materialize_path

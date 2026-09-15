@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from .common import HarnessTarget
+from skill_manager.application.skills.package_resolution import PackageSource, SourceEvidence, DistributionRelationship
 
 
 class EnableSkillRequest(HarnessTarget):
@@ -183,6 +184,57 @@ class SkillPackageLinkResponse(SkillPackageProvenanceResponse):
 class SourcePackagesResponse(BaseModel):
     packages: list[SourcePackageResponse]
     skills: list[SkillPackageLinkResponse]
+
+
+class RetainedPackageCapabilities(BaseModel):
+    name: str
+    version: str | None
+    evidence: PackageEvidence
+    manifests: list[PackageManifestResponse]
+    components: list[PackageComponentResponse]
+    diagnostics: list[str]
+    revision: str
+
+
+class PackageExternalObservation(BaseModel):
+    harness: str | None
+    path: str | None
+    ownership: Literal['external-existing']
+    state: Literal['present', 'missing', 'unknown'] | None = None
+
+
+class ManagedPackageSkillLink(BaseModel):
+    packageId: str | None
+    name: str
+    resolutionStatus: Literal['resolved', 'unresolved', 'unavailable', 'ambiguous']
+    reason: str | None
+    observations: list[PackageExternalObservation]
+    sourceSkillPath: str | None = None
+
+
+class ManagedPackageResponse(BaseModel):
+    id: str
+    ownership: Literal['skill-manager']
+    source: PackageSource
+    fingerprint: str | None
+    capabilities: RetainedPackageCapabilities | None
+    evidence: list[SourceEvidence]
+    distributions: list[DistributionRelationship]
+    limitations: list[str]
+    resolutionStatus: Literal['resolved', 'unresolved', 'unavailable', 'ambiguous']
+    upstreamState: Literal['current', 'changed', 'unresolved', 'unavailable', 'ambiguous']
+    candidateSource: PackageSource | None
+    reason: str | None
+    artifactRoot: str | None
+    artifactState: Literal['current', 'changed', 'missing', 'unavailable', 'not-retained']
+    state: Literal['current', 'changed', 'missing', 'unavailable', 'unresolved', 'ambiguous']
+    skillRefs: list[str]
+    observations: list[PackageExternalObservation]
+
+
+class ManagedPackagesResponse(BaseModel):
+    packages: list[ManagedPackageResponse]
+    skills: dict[str, ManagedPackageSkillLink]
 
 
 class SkillDetailResponse(BaseModel):
