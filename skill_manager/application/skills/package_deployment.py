@@ -10,7 +10,7 @@ from typing import Literal
 from urllib.parse import unquote, urlsplit
 
 from skill_manager.jsonc import strip_jsonc
-from .managed_packages import ManagedPackageStore
+from .managed_packages import ManagedPackageStore, package_fingerprint
 from .package_resolution import PackageSource
 
 
@@ -29,6 +29,9 @@ class NativeRegistration:
     evidence: Literal['native-source', 'native-root', 'name-only', 'native-control'] = 'name-only'
     source: PackageSource | None = None
     root: Path | None = None
+    # Present only when a deployment adapter can reconcile a live native entry
+    # to Skill Manager's persisted deployment record.
+    deployment_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -56,7 +59,7 @@ class PackageDeploymentPlan:
     fingerprint: str | None = None
     candidate_source: dict | None = None
     strategy: Literal['native-local', 'native-install', 'manual/unsupported'] = 'manual/unsupported'
-    ownership: Literal['absent', 'external-existing', 'conflict'] = 'absent'
+    ownership: Literal['absent', 'managed', 'external-existing', 'conflict'] = 'absent'
     support: Literal['supported', 'manual', 'unsupported'] = 'manual'
     surface: dict = field(default_factory=dict)
     actions: list[dict] = field(default_factory=list)
@@ -109,7 +112,13 @@ class PackageDeploymentPlanner:
     def __init__(self, packages: ManagedPackageStore):
         self.packages = packages
 
-    def plan(self, package_id: str, target: NativeTarget) -> PackageDeploymentPlan:
+    def plan(
+        self,
+        package_id: str,
+        target: NativeTarget,
+        *,
+        owned_deployment: dict | None = None,
+    ) -> PackageDeploymentPlan:
         parent = self.packages.get(package_id)
         plan = PackageDeploymentPlan(package_id, target.harness, _state(parent))
         plan.requires_reconciliation = (parent['artifactState'] != 'current' or parent['upstreamState'] != 'current'
@@ -162,6 +171,17 @@ class PackageDeploymentPlanner:
             plan.ownership = 'conflict'
             plan.blockers.append('native-controls-need-reconciliation')
 
+        managed_target = False
+        if owned_deployment is not None:
+            managed_target = self._owned_target_matches(target, owned_deployment)
+            if managed_target:
+                plan.ownership = 'managed'
+                plan.evidence.append('managed-deployment')
+            else:
+                plan.ownership = 'conflict'
+                plan.requires_reconciliation = True
+                plan.blockers.append('managed-deployment-unproven')
+
         try:
             matches = [item for item in target.registrations if self._matches(item, selected)]
         except (OSError, ValueError, RuntimeError):
@@ -169,15 +189,23 @@ class PackageDeploymentPlanner:
             plan.requires_reconciliation = True
             plan.blockers.append('native-source-unreadable')
             return plan
-        if matches:
+        # The persisted deployment is the only authority for an existing
+        # managed target. A source match is not required during update.
+        owned_entries = [item for item in target.registrations if managed_target
+                         and item.native_id == owned_deployment['nativeId']
+                         and item.root == Path(owned_deployment['target'])]
+        external_matches = [item for item in matches if item not in owned_entries]
+        if external_matches:
             plan.ownership = 'external-existing'
-            plan.evidence.extend(item.evidence for item in matches)
-        elif any(item.evidence == 'native-source' and item.source is not None
+            plan.evidence.extend(item.evidence for item in external_matches)
+        elif any(item not in owned_entries and item.evidence == 'native-source' and item.source is not None
                  and _source_identifier(asdict(item.source)).casefold() == _source_identifier(selected['source']).casefold()
                  for item in target.registrations):
             plan.ownership = 'conflict'
             plan.blockers.append('native-source-version-unreconciled')
         elif any(item.get('harness') == target.harness and item.get('state') == 'present'
+                  and not (managed_target and item.get('path') and
+                           Path(item['path']).resolve().is_relative_to(Path(owned_deployment['target']).resolve()))
                  for record in (parent, selected) for item in record['observations']):
             plan.ownership = 'conflict'
             plan.blockers.append('external-observation-needs-native-reconciliation')
@@ -187,11 +215,15 @@ class PackageDeploymentPlanner:
         except (OSError, ValueError, RuntimeError):
             plan.strategy = 'manual/unsupported'
             plan.blockers.append('native-format-unreadable')
+        if managed_target:
+            self._apply_owned_target(plan, target, owned_deployment)
         native_id = plan.surface.get('nativeId')
-        if (native_id and native_id in target.occupied_identifiers
-            and not any(item.native_id == native_id for item in matches)) or any(
-            item.native_id == native_id and item not in matches for item in target.registrations
-        ):
+        if ((not managed_target and native_id and native_id in target.occupied_identifiers
+             and not any(item.native_id == native_id for item in matches))
+            or (not managed_target and any(
+                item.native_id == native_id and item not in matches for item in target.registrations
+            ))
+            or (managed_target and sum(item.native_id == native_id for item in target.registrations) > 1)):
             plan.ownership = 'conflict'
             plan.blockers.append('native-identifier-conflict')
         destination = plan.surface.get('path')
@@ -200,12 +232,12 @@ class PackageDeploymentPlanner:
                           or not Path(value).resolve().is_relative_to(target.root.resolve())):
                 plan.ownership = 'conflict'
                 plan.blockers.append('unsafe-native-destination')
-        if destination and (Path(destination).exists() or Path(destination).is_symlink()) and not matches:
+        if destination and (Path(destination).exists() or Path(destination).is_symlink()) and not (matches or managed_target):
             plan.ownership = 'conflict'
             plan.blockers.append('native-destination-occupied')
         if plan.ownership == 'external-existing':
             plan.blockers.append('external-existing-no-takeover')
-        if plan.blockers or plan.ownership != 'absent':
+        if plan.blockers or plan.ownership not in ('absent', 'managed'):
             plan.actions.clear()
         plan.requires_reconciliation |= plan.ownership == 'conflict'
         plan.support = 'supported' if not plan.blockers else 'manual'
@@ -218,6 +250,72 @@ class PackageDeploymentPlanner:
         if registration.evidence == 'native-root' and registration.root and selected['artifactRoot']:
             return registration.root.resolve() == Path(selected['artifactRoot']).resolve()
         return False
+
+    @staticmethod
+    def _owned_target_matches(target: NativeTarget, deployment: dict) -> bool:
+        required = ('deploymentId', 'harness', 'root', 'target', 'nativeId', 'appliedFingerprint')
+        if (any(not deployment.get(key) for key in required) or deployment.get('harness') != target.harness
+                or deployment.get('verified') is not True):
+            return False
+        try:
+            root = Path(deployment['root'])
+            destination = Path(deployment['target'])
+            if root != target.root or not _safe_directory_target(root):
+                return False
+            if destination.is_symlink() or not destination.is_dir():
+                return False
+            info = destination.stat()
+            if deployment.get('targetIdentity') != [info.st_dev, info.st_ino]:
+                return False
+            if not destination.resolve().is_relative_to(root.resolve()):
+                return False
+            if package_fingerprint(destination) != deployment.get('targetFingerprint', deployment['appliedFingerprint']):
+                return False
+            return any(
+                item.native_id == deployment['nativeId']
+                and item.evidence == 'native-root'
+                and item.root is not None
+                and item.root.resolve() == destination.resolve()
+                and (item.deployment_id == deployment['deploymentId'] if target.harness == 'codex'
+                     else item.deployment_id in (None, deployment['deploymentId']))
+                for item in target.registrations
+            )
+        except (OSError, ValueError, RuntimeError):
+            return False
+
+    @staticmethod
+    def _apply_owned_target(plan: PackageDeploymentPlan, target: NativeTarget, deployment: dict) -> None:
+        if plan.strategy != deployment.get('strategy'):
+            plan.blockers.append('managed-strategy-changed')
+            return
+        if plan.strategy not in ('native-local', 'native-install') or target.harness == 'opencode':
+            plan.blockers.append('managed-native-strategy-unsupported')
+            return
+        native_id = plan.surface.get('nativeId')
+        if target.harness == 'codex':
+            native_id = native_id.split('@')[0] + '@' + deployment['nativeId'].split('@')[1]
+        if native_id != deployment.get('nativeId'):
+            plan.blockers.append('managed-native-identifier-changed')
+            return
+        destination = Path(deployment['target'])
+        if destination.is_symlink() or not destination.resolve().is_relative_to(target.root.resolve()):
+            plan.blockers.append('unsafe-managed-target')
+            return
+        plan.surface['path'] = str(destination)
+        plan.surface['placementPackageId'] = deployment.get('placementPackageId', deployment['selectedPackageId'])
+        if target.harness == 'codex':
+            marketplace = deployment['nativeId'].split('@')[1]
+            suffix = deployment.get('placementPackageId', deployment['selectedPackageId'])[:16]
+            plan.surface.update(nativeId=native_id, marketplaceId=marketplace,
+                marketplacePath=str(destination / '.agents/plugins/marketplace.json'),
+                wholePackagePath=str(destination / 'plugins' / suffix),
+                marketplaceArgv=['codex', 'plugin', 'marketplace', 'add', str(destination), '--json'],
+                installArgv=['codex', 'plugin', 'add', native_id, '--json'],
+                placementPackageId=deployment.get('placementPackageId', deployment['selectedPackageId']),
+                marketplaceDocument={'name': marketplace, 'plugins': [{'name': native_id.split('@')[0],
+                    'source': {'source': 'local', 'path': './plugins/' + suffix}}]})
+        plan.actions = [{'action': 'reconcile-whole-package', 'unit': 'whole-package',
+                         'managedPackageId': plan.selected_package_id, 'destination': str(destination)}]
 
     @staticmethod
     def _strategy(plan, record, target, *, native_intent):
@@ -271,12 +369,12 @@ class PackageDeploymentPlanner:
                 plan.surface = {'path': str(marketplace_root), 'nativeId': name + '@' + marketplace,
                                 'marketplaceId': marketplace, 'marketplacePath': str(catalog), 'scope': 'user',
                                 'loader': 'codex-local-marketplace',
-                                'marketplaceArgv': ['codex', 'plugin', 'marketplace', 'add', str(marketplace_root)],
+                                 'marketplaceArgv': ['codex', 'plugin', 'marketplace', 'add', str(marketplace_root), '--json'],
                                 'marketplaceDocument': {'name': marketplace, 'plugins': [
                                     {'name': name, 'source': {'source': 'local', 'path': './plugins/' + suffix}}]},
                                 'wholePackagePath': str(marketplace_root / 'plugins' / suffix),
                                 'installArgv': ['codex', 'plugin', 'add', name + '@' + marketplace, '--json']}
-                if marketplace in target.occupied_identifiers:
+                if marketplace in target.occupied_identifiers and plan.ownership != 'managed':
                     plan.blockers.append('marketplace-identifier-conflict')
                 plan.actions = [
                     {'action': 'register-whole-package-marketplace', 'unit': 'whole-package',

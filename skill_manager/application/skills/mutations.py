@@ -21,6 +21,7 @@ from .queries import SkillsQueryService
 from .read_models import SkillsReadModelService
 from .runtime import RuntimeSkillRecord, runtime_skill_document
 from .source_fetch import SourceFetchService
+from .package_deployment_service import PackageDeploymentService
 
 
 class SkillsMutationService:
@@ -33,6 +34,10 @@ class SkillsMutationService:
         self.read_models = read_models
         self.queries = queries
         self.source_fetcher = source_fetcher
+
+    @property
+    def package_deployments(self) -> PackageDeploymentService:
+        return PackageDeploymentService(self.queries.managed_packages)
 
     def enable_skill(self, skill_ref: str, harness: str) -> dict[str, bool]:
         entry = self.queries.require_entry(skill_ref)
