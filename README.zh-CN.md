@@ -28,7 +28,7 @@ AI 扩展通常分散在各个 harness 自己的文件夹、MCP 配置文件、s
 
 | 产品概念 | 含义 |
 |---|---|
-| **使用中** | Skill Manager 正在控制此项目，并可在不同 harness 中启用或停用。 |
+| **使用中** | Skill Manager 正在管理此项目；可用操作取决于项目类型和 harness。 |
 | **待确认** | Skill Manager 发现了本地状态、配置差异或库存问题，需要你先做决定。 |
 | **扫描** | 在信任某个 Skill 之前，使用 LLM 驱动的安全检查进行确认。 |
 | **发现** | 浏览商城，并预览外部工具。 |
@@ -36,7 +36,8 @@ AI 扩展通常分散在各个 harness 自己的文件夹、MCP 配置文件、s
 ## 你可以做什么
 
 - 查看哪些扩展正在使用、哪些需要确认，以及它们在哪些 harness 中启用。
-- 将本地 Skill 采用到共享库存，再按 harness 启用或停用。
+- 将独立 Skill 采用到共享库存，再按 harness 启用或停用。
+- 确认包内 Skill 的上游来源，集中管理完整包，并通过受支持 harness 的原生机制部署。
 - 使用保存的 LLM provider 配置扫描 Skill，并在使用前查看发现项。
 - 安装或采用 MCP 服务器配置，解决配置差异，并写入支持的 harness。
 - 统一管理可复用的 slash command，并同步到支持的 harness。
@@ -52,9 +53,9 @@ AI 扩展通常分散在各个 harness 自己的文件夹、MCP 配置文件、s
 
 ### Skill
 
-使用 Skill 作为共享本地包，而不是在每个 harness 中维护单独副本。
+独立 Skill 使用共享存储，而不是在每个 harness 中维护单独副本。
 
-典型流程：
+独立 Skill 流程：
 
 1. 确认 harness 中发现的 Skill，或从商城安装一个 Skill。
 2. 将它采用到 Skill Manager 库存。
@@ -62,6 +63,19 @@ AI 扩展通常分散在各个 harness 自己的文件夹、MCP 配置文件、s
 4. 从一个地方更新、移除或删除。
 
 ![skill-market-skill-matrxi](./assets/skill-manager-skill-matrix.png)
+
+### 包内 Skill
+
+本地发现的 Skill 可能只是较大插件的一部分，**不必原先通过 Skill Manager 商城安装**。
+通过 **Review package source** 确认来源，再集中管理权威上游的完整包。
+**Managed packages** 页面将中央副本与各 harness 的原生安装分开显示。
+
+来源解析依据明确的仓库、Git、包注册表或已有商城记录，不按相似名称猜测。
+证据缺失或冲突会明确显示为未解析或有歧义。已有外部安装不会被自动接管。
+能力列表仅解释包的内容，不会将 Skill、MCP、hook 或 command 拆开安装。
+
+完整流程和限制见[包管理指南与支持矩阵](docs/package-management-ux.md)（英文）。
+这些包管理能力描述本仓库版本；可通过[源码运行](#从源码运行)使用当前代码。
 
 ### Skill 扫描
 
@@ -146,6 +160,8 @@ Windows ARM64、Windows Server、UNC 路径、映射网络盘和便携式磁盘�
 
 ## 支持的 harness
 
+以下表格仅描述**独立** Skill、MCP 和 command 管理，不代表原生包部署能力。
+
 | Harness | Skill | MCP 服务器 | Slash command |
 |---|---:|---:|---:|
 | Codex CLI | 支持 | 支持 | 支持 |
@@ -161,6 +177,11 @@ Windows ARM64、Windows Server、UNC 路径、映射网络盘和便携式磁盘�
 |---|---:|---:|---:|
 | Codex CLI | 支持 | 暂不支持 | 暂不支持 |
 | 其他 harness | 暂不支持 | 暂不支持 | 暂不支持 |
+
+原生完整包部署目前需要明确配置的 Linux 执行环境：Claude 和 Codex 的服务/API 支持部署、更新、
+启用、停用和移除（Claude 更新目前未在界面中提供）；OpenCode 支持部署、更新和移除，没有启用/停用开关；Cursor 保持 Manual。
+是否可用取决于原生机制和所有权检查，不由 harness 的精确版本号决定。
+参见[原生生命周期验证](docs/native-package-deployment.md)及[配置说明](docs/package-management-ux.md#http-and-runtime-setup)。
 
 ## 本地优先安全模型
 
@@ -179,16 +200,18 @@ Skill Manager 是本地配置管理工具。它在你的机器上运行，并读
 - 启用、停用、解决差异或卸载 MCP 服务器
 - 创建、更新、同步、导入或删除 slash command
 - 修改 harness 支持设置
+- 获取并采用权威来源的完整包快照
+- 部署、更新或移除已拥有的原生包，并在支持时启用或停用
 
 在 macOS 上，应用拥有的文件位于 `~/Library/Application Support/skill-manager`；在 Linux 上使用 XDG base directories；在 Windows 上使用 `%APPDATA%\skill-manager` 和 `%LOCALAPPDATA%\skill-manager`。
 
 ## 工作方式
 
-### Skill
+### 独立 Skill
 
-采用之前，各 harness 指向各自的本地 Skill 文件夹。采用之后，Skill Manager 会在共享本地存储中保留一个规范包，并通过本地链接暴露给选定 harness。macOS/Linux 使用符号链接，Windows 使用普通用户即可创建的目录联接。停用某个 harness 会移除该 harness 绑定，但不会删除包本身。
+采用独立 Skill 之前，各 harness 指向各自的本地 Skill 文件夹。采用之后，Skill Manager 会在共享本地存储中保留一个规范 Skill，并通过本地链接暴露给选定 harness。macOS/Linux 使用符号链接，Windows 使用普通用户即可创建的目录联接。停用某个 harness 会移除该 harness 绑定，但不会删除 Skill 本身。
 
-Skill Manager 默认把已管理 Skill 视为可迁移：Skill 一旦进入 shared store，就可以启用到任何受支持 harness。`originHarness` 只保留作来源记录。
+Skill Manager 默认把已管理的独立 Skill 视为可迁移：进入 shared store 后，就可以启用到受支持 harness。`originHarness` 只保留作来源记录。包内 Skill 使用前述完整包流程；独立 MCP 和 command 管理仍然分开进行。
 
 Hermes Agent Skill 使用 Hermes 分类目录：`~/.hermes/skills/<category>/<skill>/SKILL.md`。共享 Skill 启用到 Hermes 时，默认会链接到 `skill-manager` 分类下。Skill Manager 只导入 Hermes 自己从外部 hub provenance 安装的 Skill（`.hub/lock.json` 中非 official/builtin/optional 的条目）。Hermes 自学习/local Skill、`.bundled_manifest` 跟踪的内置打包 Skill，以及 Hermes hub provenance 中记录的官方 optional Skill，都会从 Skill Manager 库存和批量操作中排除；Skill Manager 不会修改、链接或删除这些文件夹，让 `hermes update` 和 Hermes 自有 Skill 同步继续保持原有所有权。
 
@@ -351,19 +374,28 @@ npm run build
 
 ## 故障排查
 
+- 包来源未解析、原生目标显示 Manual、外部安装或快照变化的处理说明见[包管理故障排查](docs/package-management-ux.md#troubleshooting)（英文）。
 - 如果商城请求失败并显示 `Marketplace is temporarily unavailable`，请确认网络连接后重试。
 - 在 macOS 上，如果 `npm install -g @mode-io/skill-manager` 提示 Homebrew 已拥有 `skill-manager`，请先卸载 Homebrew formula。反过来也一样：切回 Homebrew 前请先卸载 npm 包。
 - 在 Windows 上，如果 Codex 显示不可用，请在同一个 PowerShell 中运行 `codex --version`，修复 `PATH` 后重启 Skill Manager。Skill Manager 不负责安装或登录 Codex。
 - Windows Skill 绑定使用目录联接。请把 Skill Manager 数据目录和 Codex Skill 根目录放在本机磁盘；目前不支持网络盘和便携式磁盘。
 - 如果某个 MCP harness 显示为不可用，说明 Skill Manager 检测到本地客户端缺失，或该客户端不支持所需配置界面。
 
+## 架构文档（英文）
+
+- [项目目标与边界](docs/native-package-management-prd.md)
+- [来源解析与获取](docs/package-source-resolution.md)、[中央包管理](docs/managed-source-packages.md)
+- [包能力发现](docs/source-package-capabilities.md)
+- [原生部署规划](docs/native-package-strategies.md)、[执行与验证](docs/native-package-deployment.md)
+- [OpenCode 静态配置](docs/opencode-static-config.md)、[运行时 Skill 发现](docs/opencode-runtime-skills.md)
+
 ## 后续计划
 
 ### 扩展类型
 
-- [ ] Hook 支持
+- [ ] 独立 hook 管理（包内 hook 由原生 harness 负责）
 - [x] Slash command 支持
-- [ ] Plugin 支持
+- [x] 已验证路径的完整原生插件包管理
 
 ### Harness 扩展
 

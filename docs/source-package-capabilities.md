@@ -1,16 +1,21 @@
-# Source-package capability discovery (Task 04A)
+# Source-package capability discovery
 
 An individual skill and its source package are separate things. The existing
 managed `sourcePath` is still the original **skill directory**, never a package
 root. Runtime adoption keeps that path; local adoption now also records the
-directory actually copied. Content-only temporary directories are not recorded.
+directory actually copied for standalone adoption. Content-only temporary
+directories are not recorded. This layer explains package contents; it does not
+resolve upstream authority or install components. The
+[source resolver](package-source-resolution.md) reuses it after acquisition, and
+the [native planner](native-package-strategies.md) separately decides deployability.
 
 ## Root and identity rules
 
 Discovery accepts an original absolute file-backed skill directory. It checks
 that directory and at most eight parents for known manifests. It stops at the
 first candidate manifest root, `package.json`, or `.git` boundary. It never
-crosses the user's home, filesystem root, or Skill Manager's store. An unrelated
+crosses the user's home, filesystem root, or configured stop paths (the application
+supplies its central Skill store as a stop path). An unrelated
 or invalid nearest manifest cannot cause discovery to continue into another
 package. A manifest must include this exact resolved skill through its supported
 skill paths; merely being an ancestor is insufficient.
@@ -21,12 +26,14 @@ installed copies do not. This is not a globally unique repository/package ID.
 The display name/version comes from Agent Plugins first, then Claude, Cursor,
 Codex. This display preference is not a client loading/overlay policy.
 
-Capabilities are read afresh for each detail/package API request. A request-local
+Local capabilities are read afresh for each discovery/detail API request. A request-local
 cache parses each root once. There is no persistent capability cache or schema
 migration. Added/removed manifests, component paths and MCP/hook entry names are
 reflected on the next request. `revision` hashes the structural capability map,
 not complete source bytes or credentials; `sourceRevision` is separate per-skill
 inventory provenance. Editing a script body alone does not change capabilities.
+Managed-package capabilities are the evidence retained during authoritative
+acquisition/capture; central refresh checks them for changes separately.
 
 ## Verified contracts
 
@@ -53,9 +60,13 @@ Authoritative sources:
   configured registrations, not a portable package-manifest contract.
 
 The Codex source establishes the convention independently of any n8n example.
-OpenCode runtime provenance plus `package.json.main` does **not** establish a
-declared OpenCode integration; it remains unresolved. No package-name-specific
-logic exists. Legacy command migration, marketplace metadata overlays and
+A multi-harness package such as n8n's skills can illustrate co-located manifests,
+shared Skills and wider hook content; no package-name-specific rule is used.
+OpenCode runtime provenance plus `package.json.main` alone does **not** establish a
+portable capability contract. The separate [OpenCode native planner](native-package-strategies.md#opencode-native-contract)
+checks a declared server export, or `main` with explicit OpenCode distribution evidence.
+It does not add an OpenCode parser to this structural layer.
+Legacy command migration, marketplace metadata overlays and
 unimplemented client extensions are not reproduced. Vendor skill discovery is
 direct-directory/immediate-child except Codex's bounded recursion.
 
@@ -74,12 +85,13 @@ direct-directory/immediate-child except Codex's bounded recursion.
 - The skill detail UI distinguishes original skill source from package root,
   shows capabilities/evidence, and explains unresolved results.
 
-`supported: true` means only that the existing individual-skill copy path is
-available. It is not a security audit or a promise of full plugin compatibility.
-MCP, hooks, apps, rules, agents and commands remain package-deployment-unsupported.
+The component field `supported: true` describes the existing individual-Skill copy
+capability, not permission to extract a Skill from a managed package. MCPs, hooks,
+apps, rules, agents and commands have no individual installation action here.
 Their JSON shape/file presence is inspected, not full runtime transport/event
-validity. The feature is a structural discovery layer, not a conformant plugin
-runtime, installer, or full package validator. No capability alters skill toggles.
+validity. A native harness may load them as part of a supported **whole package**.
+The map is not a security audit, plugin runtime or deployment engine; package-backed
+Adopt and native support are governed by their separate ownership and mechanism checks.
 
 ## Safety and limits
 
@@ -95,9 +107,14 @@ runtime, installer, or full package validator. No capability alters skill toggle
   Source packages and user configuration are never modified by discovery.
 - Content-only records, deleted original sources, ambiguous local sightings,
   GitHub-relative paths without retained checkouts, and old managed records
-  without original provenance remain unresolved. No remote checkout is fetched.
-- Canonical adoption can replace the original folder with a store link under
+  without original provenance remain unresolved by local capability discovery.
+  It fetches no remote checkout; source resolution may separately obtain and inspect
+  an authoritative package using explicit provenance.
+- Standalone adoption can replace the original folder with a store link under
   existing behaviour. Such a path cannot prove an external package afterward;
   the stored original hint remains, but capabilities become unresolved. Retained
   configured/runtime source folders keep their proven relationship.
-- Unresolved package ownership does not change existing skill adoption or use.
+- Capability discovery itself performs no adoption or mutation. Once package
+  evidence is established, failed package resolution blocks package adoption;
+  it does not trigger a standalone leaf-copy fallback. Existing standalone
+  management and externally installed content remain separate.

@@ -28,7 +28,7 @@ AI extensions are scattered across harness-specific folders, MCP config files, s
 
 | Product idea | What it means |
 |---|---|
-| **In use** | Skill Manager controls the item and can enable or disable it across harnesses. |
+| **In use** | Skill Manager manages the item; available actions depend on its type and harness. |
 | **Needs review** | Skill Manager found local state, config differences, or inventory issues that need a decision. |
 | **Scan** | Run LLM-backed security checks against Skills before trusting them. |
 | **Discover** | Browse marketplaces and preview external tools. |
@@ -36,7 +36,8 @@ AI extensions are scattered across harness-specific folders, MCP config files, s
 ## What you can do
 
 - See what is in use, what needs review, and where extensions are active.
-- Adopt local Skills into one shared inventory, then enable or disable them per harness.
+- Adopt standalone Skills into one shared inventory, then enable or disable them per harness.
+- Review a package-backed Skill's upstream source, manage the whole package, and deploy it natively where supported.
 - Scan Skills with a saved LLM provider configuration and review findings before use.
 - Install or adopt MCP server configs, resolve differences, and enable them where supported.
 - Manage reusable slash commands once, then sync them to supported harnesses.
@@ -52,9 +53,9 @@ Start with the whole extension portfolio: what is in use, what needs review, wha
 
 ### Skills
 
-Use Skills as shared local packages instead of maintaining separate copies per harness.
+Use standalone Skills from one shared store instead of maintaining separate copies per harness.
 
-Typical flow:
+Standalone flow:
 
 1. Review a Skill found in a harness or install one from the marketplace.
 2. Adopt it into the Skill Manager inventory.
@@ -62,6 +63,24 @@ Typical flow:
 4. Update, remove, or delete it from one place.
 
 ![skill-market-skill-matrxi](./assets/skill-manager-skill-matrix.png)
+
+### Package-backed Skills
+
+A locally installed Skill may be only one part of a larger plugin. It does **not**
+need to have come from Skill Manager's marketplace. Use **Review package source**
+to resolve explicit upstream evidence, then manage the authoritative whole package.
+The **Managed packages** page separates that central copy from each harness's
+native installation.
+
+Source resolution uses declared repository, Git, package-registry or existing
+marketplace provenance—not similar names. Missing or conflicting evidence stays
+unresolved or ambiguous. Existing external installs remain external; adoption
+does not take them over. Capability summaries explain package contents, not a menu
+for separately installing its Skills, MCPs, hooks or commands.
+
+See the [package guide and support matrix](docs/package-management-ux.md) for
+the workflow and current limits. These package-aware features describe this
+repository; the [source setup](#from-source) runs this checkout.
 
 ### Skill scanning
 
@@ -181,6 +200,9 @@ Windows ARM64, Windows Server, UNC paths, mapped network drives, and removable d
   </tr>
 </table>
 
+The following tables cover **standalone** Skill, MCP and command management.
+They do not imply native package deployment support.
+
 | Harness | Skills | MCP servers | Slash commands |
 |---|---:|---:|---:|
 | Codex CLI | Yes | Yes | Yes |
@@ -196,6 +218,14 @@ The table above describes macOS/Linux support. The initial native Windows suppor
 |---|---:|---:|---:|
 | Codex CLI | Yes | Not Yet | Not Yet |
 | Other harnesses | Not Yet | Not Yet | Not Yet |
+
+Native whole-package deployment currently uses an explicitly configured Linux
+runner: Claude and Codex support deploy/update/enable/disable/remove through the
+service/API (Claude Update is not currently offered in the UI); OpenCode
+supports deploy/update/remove with no enable/disable toggle; Cursor remains Manual.
+Readiness depends on the required mechanism and ownership checks, not exact
+harness versions. See [native lifecycle evidence](docs/native-package-deployment.md)
+and [operator setup](docs/package-management-ux.md#http-and-runtime-setup).
 
 ## Local-first safety
 
@@ -214,16 +244,18 @@ Actions that can change local state include:
 - enabling, disabling, resolving, or uninstalling an MCP server
 - creating, updating, syncing, importing, or deleting a slash command
 - changing harness support settings
+- acquiring and adopting an authoritative package snapshot
+- deploying, updating or removing an owned native package, or toggling it where supported
 
 App-owned files live under `~/Library/Application Support/skill-manager` on macOS, XDG base directories on Linux, and `%APPDATA%\skill-manager` plus `%LOCALAPPDATA%\skill-manager` on Windows.
 
 ## How it works
 
-### Skills
+### Standalone Skills
 
-Before adoption, each harness points at its own local skill folder. After adoption, Skill Manager keeps one canonical package in its shared local store and exposes it to selected harnesses with local links. It uses symbolic links on macOS/Linux and ordinary-user directory junctions on Windows. Disabling a harness removes that harness binding without deleting the package.
+Before standalone adoption, each harness points at its own local skill folder. After adoption, Skill Manager keeps one canonical Skill in its shared local store and exposes it to selected harnesses with local links. It uses symbolic links on macOS/Linux and ordinary-user directory junctions on Windows. Disabling a harness removes that harness binding without deleting the Skill.
 
-Skill Manager treats managed Skills as portable by default: once a Skill is adopted into the shared store, it can be enabled for any supported harness. `originHarness` is retained only as provenance.
+Skill Manager treats managed standalone Skills as portable by default: once a Skill is adopted into the shared store, it can be enabled for any supported harness. `originHarness` is retained only as provenance. Package-backed items instead use the whole-package workflow described above; existing standalone MCP and command management stays separate.
 
 Hermes Agent Skills use the categorized Hermes layout under `~/.hermes/skills/<category>/<skill>/SKILL.md`. Shared Skills enabled for Hermes are linked under the `skill-manager` category by default. Skill Manager only imports Hermes Skills that Hermes itself installed from external hub provenance (`.hub/lock.json` entries that are not official/builtin/optional). Hermes self-learned/local Skills, bundled Skills tracked by `.bundled_manifest`, and official optional Skills recorded in Hermes hub provenance are excluded from Skill Manager inventory and bulk actions; Skill Manager leaves those folders untouched so `hermes update` and Hermes-owned Skill sync keep their normal ownership.
 
@@ -386,19 +418,29 @@ npm run build
 
 ## Troubleshooting
 
+- For unresolved package sources, Manual native targets, external installs or changed snapshots, see [package troubleshooting](docs/package-management-ux.md#troubleshooting).
 - If Marketplace requests fail with `Marketplace is temporarily unavailable`, verify your network connection and try again.
 - On macOS, if `npm install -g @mode-io/skill-manager` reports that Homebrew already owns `skill-manager`, uninstall the Homebrew formula first. The inverse also applies: uninstall the npm package before switching back to Homebrew.
 - On Windows, if Codex is unavailable, run `codex --version` in the same PowerShell session and restart Skill Manager after fixing `PATH`. Skill Manager does not install or sign in to Codex.
 - Windows Skill bindings are directory junctions. Keep the Skill Manager data directory and Codex Skills root on local disks; network and removable-drive paths are not supported.
 - If an MCP harness is shown as unavailable, Skill Manager has detected that the local client is missing or does not support the required config surface.
 
+## Architecture documentation
+
+- [Programme goals and boundaries](docs/native-package-management-prd.md)
+- [Package source resolution and acquisition](docs/package-source-resolution.md)
+- [Central managed packages](docs/managed-source-packages.md)
+- [Package capability discovery](docs/source-package-capabilities.md)
+- [Native planning](docs/native-package-strategies.md) and [execution/verification](docs/native-package-deployment.md)
+- [OpenCode static config](docs/opencode-static-config.md) and [runtime Skill discovery](docs/opencode-runtime-skills.md)
+
 ## More to come
 
 ### Extension families
 
-- [ ] Hook support
+- [ ] Standalone hook management (package hooks remain the native harness's responsibility)
 - [x] Slash command support
-- [ ] Plugin support
+- [x] Whole-package native plugin management for verified routes
 
 ### Harness expansion
 

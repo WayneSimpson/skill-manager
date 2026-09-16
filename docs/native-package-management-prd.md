@@ -24,6 +24,7 @@ The initial target harnesses are:
 - OpenCode
 
 Existing standalone Skill behaviour must continue to work as it does today.
+Standalone MCP and command management also remains separate from package deployment.
 
 ## 3. Core Architecture
 
@@ -51,7 +52,7 @@ Skill Manager must therefore distinguish between:
 
 ### Source Resolution
 
-Skill Manager must attempt to establish the trustworthy upstream source of a discovered package.
+Skill Manager must deterministically establish the trustworthy upstream source of a discovered package from explicit evidence, never fuzzy or name-only matching.
 
 Evidence may come from native harness metadata, plugin/package manifests, Git or repository information, package registries, marketplaces, or other explicit provenance.
 
@@ -61,7 +62,7 @@ A Skill does **not** need to have originally been installed through the Skill Ma
 
 If the authoritative source cannot be established confidently, Skill Manager must not guess.
 
-The existing Skill can continue to be managed normally, but native cross-harness package deployment should be shown as unavailable until the package source is resolved.
+The existing installation remains usable, but package-backed adoption and native deployment remain blocked until its source is resolved. There is no fallback to copying the observed leaf Skill. Already-managed standalone Skills retain their existing controls.
 
 ## 4. Native Package Deployment
 
@@ -74,6 +75,8 @@ The same managed package may therefore be deployed differently to different harn
 For example, one harness may load a managed local package directly while another may install or cache its own runtime copy.
 
 Skill Manager owns the package identity, source/version intent and deployment state. It does not need to force every harness to run from one shared physical directory.
+
+Readiness depends on the required native mechanism, policy and ownership checks, not exact harness version numbers. Source revisions and package versions still pin the managed content; harness versions are verification evidence only. Available lifecycle actions differ by harness—an unverified enable/disable control must not be invented. The [native support matrix](native-package-deployment.md#verified-native-support) records the current verified routes and limits.
 
 Where a safe native deployment route cannot be established, the result for the current programme is:
 
@@ -96,6 +99,8 @@ Doing so would require Skill Manager to reproduce the behaviour and semantics of
 Native whole-package deployment is therefore the required route for package-backed extensions in this phase.
 
 Component-level fallback remains separate future research and should only be pursued if real unsupported use cases justify it.
+
+Future LLM assistance could suggest unresolved source candidates for review, but cannot establish authority or control deployment. Any future component deployment would require separate approval and its own ownership/verification rules; neither participates in the current pipeline.
 
 ## 6. Existing Installations and Ownership
 
@@ -133,6 +138,8 @@ At programme level this includes:
 
 The detailed storage model, lifecycle states and implementation mechanisms belong in the relevant ClickUp tasks.
 
+Capability discovery explains what a package contains. It is not a component deployment engine and does not establish native compatibility on its own. Native dependency handling remains the harness's responsibility.
+
 ## 8. User Experience
 
 The application should make the distinction between standalone Skills and package-backed extensions understandable without exposing unnecessary technical detail.
@@ -158,7 +165,7 @@ Where safely possible, the actual harness must be used to prove that it:
 - discovers the deployed package;
 - exposes the expected Skill or Skills;
 - loads representative wider package functionality;
-- stops exposing Skill Manager-owned deployment after disable/remove;
+- stops exposing Skill Manager-owned deployment after supported disable/remove actions;
 - restores it after a valid redeployment.
 
 Testing must not damage existing user installations.
@@ -171,21 +178,21 @@ The programme builds on work that already exists.
 
 Tasks 01-04 established the OpenCode discovery and configuration foundation.
 
-Task **04A - Discover multi-harness package capabilities** has already been implemented and is in review.
+Deterministic multi-harness package capability discovery is an accepted foundation.
 
-04A should be treated as an existing foundation. It should not be restarted simply because the wider programme has evolved.
+It should not be restarted simply because the wider programme has evolved.
 
-If downstream work exposes a specific compatibility gap in 04A, that should be handled as a focused correction.
+Any specific compatibility gap should be handled as a focused correction.
 
 ## 11. Programme Stages
 
-The current programme is expected to progress broadly through:
+The programme is organised into these stages; detailed execution status belongs in ClickUp:
 
 **01-04 - OpenCode discovery/configuration foundation**
 Already completed.
 
 **04A - Package capability discovery**
-Already implemented and in review.
+Established deterministic structural discovery.
 
 **04B - Upstream package source resolution and acquisition**
 Resolve trustworthy package provenance and obtain the authoritative package/version.

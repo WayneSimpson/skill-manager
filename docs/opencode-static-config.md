@@ -1,6 +1,6 @@
 # Static OpenCode config resolution
 
-Task 01 provides a read-only resolver shared by skill and MCP readers. It
+A read-only resolver is shared by Skill and MCP readers. It
 reads these files in low-to-high precedence order:
 
 1. `~/.opencode/opencode.jsonc` (legacy)
@@ -16,9 +16,12 @@ This is a static compatibility policy, not a complete implementation of
 OpenCode's upstream configuration resolution. It does not invoke OpenCode,
 retrieve live runtime state, or include plugin-added paths during ordinary
 scans. Explicit runtime retrieval is documented separately in
-`docs/opencode-runtime-skills.md`.
+[runtime Skill discovery](opencode-runtime-skills.md). Native package
+[planning](native-package-strategies.md#opencode-native-contract) and
+[deployment](native-package-deployment.md) are separate: they reconcile native
+registrations and ownership rather than treating this merged view as runtime proof.
 
-## Task 02 skill discovery
+## Configured Skill discovery
 
 Skill Manager reads the merged `skills.paths` list from this resolver for
 OpenCode skill discovery only. It accepts only absolute string paths that are
@@ -35,7 +38,7 @@ never used as enable/disable mutation targets. This remains discovery-only: it
 does not invoke OpenCode, use live APIs or plugins, mutate user config, or
 change MCP behavior.
 
-## Task 04 MCP discovery and writes
+## Standalone MCP discovery and writes
 
 MCP discovery consumes the same merged static `mcp` section and existing
 OpenCode local/remote codec. Partial overrides, including `enabled: false`,

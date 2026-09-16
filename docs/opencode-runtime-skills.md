@@ -1,5 +1,10 @@
 # OpenCode runtime skills
 
+This optional server query discovers the Skills the running agent exposes. It is
+separate from [static discovery](opencode-static-config.md) and the native CLI
+[whole-package deployment route](native-package-deployment.md). Connecting the
+runtime server neither grants package ownership nor enables native mutation.
+
 Skill Manager saves the last successful deliberate refresh to
 `opencode-runtime-skills.json` in its resolved state directory (including any
 `SKILL_MANAGER_STATE_DIR` override), using an atomic file replacement. Startup
@@ -61,19 +66,23 @@ Skill Manager requests OpenCode's release endpoint:
 
 `GET /skill?directory=<absolute directory>`
 
-This is the agent-facing `Skill.Service` surface verified on OpenCode 1.18.30.
+This is the agent-facing `Skill.Service` surface previously verified on OpenCode
+1.18.30; that version is historical diagnostic evidence only, not a deployment
+gate.
 It returns a bare array of skill records; it does not echo the directory.
-The separate `/api/skill` V2 surface returns a `{location, data}` wrapper and
+The separate `/api/skill` surface returns a `{location, data}` wrapper and
 can omit skills available to the actual agent. Skill Manager does not union
-these endpoints or accept the V2 wrapper as an agent inventory response. Invalid
+these endpoints or accept that wrapper as an agent inventory response. Invalid
 non-filesystem location markers (including the agent API's built-in marker)
 are not used as paths; their skill content is still retained. Malformed
 individual records are ignored, but records with a name and no materializable
-document remain visible. A valid local `SKILL.md` location is copied from its
-exact containing package directory when the user chooses Manage; standalone
-`.md` documents are copied as a single `SKILL.md`. The plugin directory itself
-is never replaced. Content-only records can be materialized as a standalone
-package when their embedded content is present. A record with neither readable
+document remain visible. For standalone adoption, a valid local `SKILL.md` is
+copied with its containing Skill directory; standalone `.md` documents are copied
+as a single `SKILL.md`. If deterministic package evidence is found, adoption
+instead uses [source review and whole-package management](package-management-ux.md)
+without changing the original plugin directory. Content-only records without
+package evidence can be materialized as standalone Skills when embedded content
+is present. A record with neither readable
 local content nor embedded content is shown but has `actions.canManage: false`
 and a `canManageReason`.
 
@@ -87,12 +96,13 @@ errors are not saved. A save failure is reported and retains the previous snapsh
 
 ## Source provenance after adoption
 
-For a readable runtime `SKILL.md` package, the managed manifest's existing
+For a readable runtime `SKILL.md` adopted as a standalone Skill, the managed manifest's existing
 `source_path` field retains the original skill directory, including when the
 runtime sighting duplicates a static sighting. It identifies only that skill's
 source directory, not an inferred plugin/package root. Adoption copies from it;
 it does not write to it. Content-only skills have no invented source-path hint
-or auxiliary files. Package-capability discovery remains outside Task 03.
+or auxiliary files. [Package-capability discovery](source-package-capabilities.md)
+uses this original location as bounded evidence, not an assumed package root.
 
 ## Detail locations
 
