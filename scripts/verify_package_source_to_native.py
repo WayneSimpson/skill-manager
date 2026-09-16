@@ -128,7 +128,6 @@ def verify_chain(root, runner, evidence):
         return result
 
     evidence['versions'] = {h:native([h,'--version']).stdout.strip() for h in ('claude','codex')}
-    assert evidence['versions'] == {'claude':'2.1.269 (Claude Code)', 'codex':'codex-cli 0.154.0'}
     evidence['stages']['before'] = {'claude':claude_registry()}
     assert not evidence['stages']['before']['claude']['skills']
     assert not evidence['stages']['before']['claude']['agents']

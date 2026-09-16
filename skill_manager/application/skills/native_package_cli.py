@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 import json
+import hashlib
 from pathlib import Path
 import re
 import subprocess
@@ -23,9 +24,17 @@ from copy import deepcopy
 from dataclasses import replace
 from typing import Any, TypeAlias
 
-from .package_deployment import NativeRegistration, NativeTarget, PackageDeploymentPlan, read_opencode_registrations
+from .package_deployment import (
+    NativeRegistration,
+    NativeTarget,
+    PackageDeploymentPlan,
+    _object_without_duplicate_keys,
+    read_opencode_registrations,
+)
 from .managed_packages import package_fingerprint
 from .package_resolution import PackageSource, _repository, _npm
+from skill_manager.atomic_files import atomic_write_text
+from skill_manager.jsonc import strip_jsonc
 
 
 NativeCLIJSON: TypeAlias = Mapping[str, Any] | list[Any]
@@ -45,7 +54,7 @@ class NativeCLIError(RuntimeError):
 
 
 class ReadOnlyNativePackageAdapter:
-    """Default for Cursor without GUI evidence and unverified OpenCode v2 runtimes."""
+    """Default for runtimes whose native mutation mechanism is not configured."""
     def __init__(self, harness, root):
         self.harness = harness
         self.root = _explicit_root(root)
@@ -784,6 +793,289 @@ class CodexNativePackageAdapter(_NativePackageCLIAdapter):
         return _safe_missing_path(cache_base)
 
 
+class OpenCodeNativePackageAdapter(_NativePackageCLIAdapter):
+    """Register one staged whole package through OpenCode's global plugin CLI."""
+
+    harness = "opencode"
+    executable = "opencode"
+
+    def __init__(
+        self,
+        root: Path | str,
+        runner: NativeCLIRunner,
+        *,
+        config_paths: Sequence[Path] = (),
+        mechanism_available: bool = False,
+    ) -> None:
+        super().__init__(root, runner, mechanism_available=mechanism_available)
+        self.config_paths = tuple(Path(path) for path in config_paths) or (
+            self.root / "config.json",
+            self.root / "opencode.json",
+            self.root / "opencode.jsonc",
+        )
+
+    def inspect(self, package_id: str, deployment: dict | None = None) -> NativeTarget:
+        self._set_diagnostics()
+        try:
+            registrations = read_opencode_registrations(self.config_paths)
+            complete = self._inventory_is_complete(registrations)
+            if self.mechanism_available:
+                self._check_binding()
+        except (OSError, RuntimeError, ValueError, TypeError) as error:
+            self._set_diagnostics("native-list-unavailable", str(error), "native-inventory-incomplete")
+            return NativeTarget(
+                self.harness,
+                self.root,
+                inventory_complete=False,
+                mechanism_available=False,
+            )
+
+        if not complete:
+            self._set_diagnostics("native-inventory-incomplete")
+        reconciled = tuple(
+            replace(
+                registration,
+                deployment_id=(
+                    deployment.get("deploymentId")
+                    if deployment is not None
+                    and registration.native_id == deployment.get("nativeId")
+                    and registration.root is not None
+                    and _same_path(registration.root, Path(deployment.get("target", "")))
+                    and registration.config_key == 'plugin'
+                    and deployment.get('nativeFingerprint') == self._registration_fingerprint(registration)
+                    else registration.deployment_id
+                ),
+            )
+            for registration in registrations
+        )
+        return NativeTarget(
+            self.harness,
+            self.root,
+            reconciled,
+            inventory_complete=complete,
+            mechanism_available=self.mechanism_available and complete,
+            occupied_identifiers=_unique(registration.native_id for registration in registrations),
+        )
+
+    def verify(self, plan: PackageDeploymentPlan, expected: str) -> dict:
+        if expected not in {"present", "absent"}:
+            return {"verified": False, "enabled": None}
+        try:
+            info = self._plan_info(plan, require_staged=expected != "absent")
+            registrations = read_opencode_registrations(self.config_paths)
+            if not self._inventory_is_complete(registrations):
+                return {"verified": False, "enabled": None}
+            matches = [
+                registration
+                for registration in registrations
+                if registration.native_id == info["native_id"]
+            ]
+            if expected == "present":
+                if len(matches) != 1 or not self._owned_registration_matches(matches[0], info):
+                    return {"verified": False, "enabled": None}
+                debug = self._debug_info()
+                if not _debug_lists_plugin(debug, info["native_id"]):
+                    return {"verified": False, "enabled": None}
+                return {
+                    "verified": True,
+                    "enabled": None,
+                    "nativeId": info["native_id"],
+                    "path": str(info["target"]),
+                    "nativeFingerprint": self._registration_fingerprint(matches[0]),
+                }
+
+            if matches:
+                return {"verified": False, "enabled": None}
+            debug = self._debug_info()
+            return {
+                "verified": not _debug_lists_plugin(debug, info["native_id"]),
+                "enabled": None,
+                "nativeId": info["native_id"],
+                "path": str(info["target"]),
+            }
+        except (NativeCLIError, OSError, RuntimeError, ValueError, TypeError) as error:
+            self._set_diagnostics("native-verification-unavailable", str(error))
+            return {"verified": False, "enabled": None}
+
+    def install(self, plan: PackageDeploymentPlan) -> dict:
+        _require_action(plan, "absent", self.mechanism_available)
+        info = self._plan_info(plan, require_staged=True)
+        registrations = read_opencode_registrations(self.config_paths)
+        if not self._inventory_is_complete(registrations):
+            raise NativeCLIError("OpenCode plugin inventory is ambiguous")
+        if any(
+            registration.native_id == info["native_id"]
+            or (registration.root is not None and _same_path(registration.root, info["target"]))
+            for registration in registrations
+        ):
+            raise NativeCLIError("OpenCode package path is already registered")
+        self._run_command([self.executable, "plugin", info["package_spec"], "--global"])
+        verification = self.verify(plan, "present")
+        if not verification["verified"]:
+            raise NativeCLIError("OpenCode native install was not verified")
+        return {"ok": True, "changed": True, **verification}
+
+    def reinstall(self, plan: PackageDeploymentPlan) -> dict:
+        """An owned file-URL stays registered while its whole directory is replaced."""
+        _require_action(plan, "managed", self.mechanism_available)
+        verification = self.verify(plan, "present")
+        if not verification["verified"]:
+            raise NativeCLIError("OpenCode owned registration is not verified")
+        return {"ok": True, "changed": False, **verification}
+
+    def uninstall(self, plan: PackageDeploymentPlan) -> dict:
+        _require_action(plan, "managed", self.mechanism_available)
+        info = self._plan_info(plan, require_staged=True)
+        before = self.verify(plan, "present")
+        if not before["verified"]:
+            raise NativeCLIError("OpenCode registration and source were not verified")
+        self._remove_exact_registration(info["native_id"])
+        verification = self.verify(plan, "absent")
+        if not verification["verified"]:
+            raise NativeCLIError("OpenCode native removal was not verified")
+        return {"ok": True, "changed": True, **verification}
+
+    def _debug_info(self) -> str:
+        # Keep stderr: a listed config entry alone must not hide native loader errors.
+        result = self._process([self.executable, "debug", "info", "--print-logs", "--log-level", "ERROR"])
+        errors = result.stderr or ''
+        if isinstance(errors, bytes):
+            errors = errors.decode('utf-8')
+        if errors.strip():
+            raise NativeCLIError('OpenCode reported a native initialization error')
+        output = result.stdout.decode('utf-8') if isinstance(result.stdout, bytes) else result.stdout
+        if not isinstance(output, str):
+            raise NativeCLIError("OpenCode debug info returned an unsupported result")
+        return output
+
+    def _process(self, argv):
+        try:
+            result = self.runner(argv)
+        except Exception as error:
+            raise NativeCLIError('OpenCode native command is unavailable') from error
+        if not isinstance(result, subprocess.CompletedProcess) or result.returncode != 0:
+            raise NativeCLIError('OpenCode native command failed')
+        return result
+
+    def _plan_info(self, plan: PackageDeploymentPlan, *, require_staged: bool) -> dict[str, Any]:
+        if plan.target_harness != self.harness or plan.strategy != "native-install":
+            raise ValueError("plan is not an OpenCode native-install plan")
+        surface = plan.surface
+        value = surface.get("path")
+        native_id = surface.get("nativeId")
+        package_spec = surface.get("packageSpec")
+        placement = surface.get("placementPackageId") or plan.selected_package_id or plan.managed_package_id
+        if not all(isinstance(item, str) for item in (value, native_id, package_spec, placement)):
+            raise ValueError("OpenCode plan has no exact package coordinates")
+        if not _PACKAGE_ID.fullmatch(placement):
+            raise ValueError("OpenCode plan has an invalid package identity")
+        target = Path(value)
+        expected = self.root / "skill-manager-packages" / placement[:16]
+        if not _same_path(target, expected) or native_id != target.as_uri() or package_spec != native_id:
+            raise ValueError("OpenCode plan does not use its exact owned file URL")
+        if not _safe_actual_directory(self.root):
+            raise ValueError("OpenCode configuration root is unsafe")
+        if require_staged and not _safe_actual_directory(target, self.root):
+            raise ValueError("OpenCode whole package is not staged safely")
+        if not require_staged and not (
+            _safe_actual_directory(target, self.root) or _safe_missing_path(target, self.root)
+        ):
+            raise ValueError("OpenCode whole package target is unsafe")
+        return {
+            "target": target,
+            "native_id": native_id,
+            "package_spec": package_spec,
+            "fingerprint": plan.fingerprint,
+        }
+
+    def _owned_registration_matches(self, registration: NativeRegistration, info: dict[str, Any]) -> bool:
+        return (
+            registration.value_kind == "string"
+            and registration.raw == info["native_id"]
+            and registration.evidence == "native-root"
+            and registration.root is not None
+            and _same_path(registration.root, info["target"])
+            and _safe_actual_directory(info["target"], self.root)
+            and (not info["fingerprint"] or package_fingerprint(info["target"]) == info["fingerprint"])
+        )
+
+    def _check_binding(self):
+        if not _safe_actual_directory(self.root):
+            raise NativeCLIError('OpenCode configuration root must exist and be safe')
+        paths = self._run([self.executable, 'debug', 'paths'])
+        help_result = self._process([self.executable, 'plugin', '--help'])
+        help_text = ''.join(value.decode('utf-8') if isinstance(value, bytes) else value or ''
+                            for value in (help_result.stdout, help_result.stderr))
+        found = re.findall(r'^config\s+(.+)$', paths, re.MULTILINE) if isinstance(paths, str) else []
+        if len(found) != 1 or not _same_path(Path(found[0].strip()), self.root):
+            raise NativeCLIError('OpenCode global config binding does not match the configured root')
+        if not isinstance(help_text, str) or 'plugin <module>' not in help_text or '--global' not in help_text:
+            raise NativeCLIError('OpenCode native plugin installation mechanism is unavailable')
+
+    @staticmethod
+    def _registration_fingerprint(registration):
+        value = [str(registration.config_path), registration.config_key, registration.value_kind, registration.raw]
+        return hashlib.sha256(json.dumps(value).encode()).hexdigest()
+
+    def _inventory_is_complete(self, registrations: Sequence[NativeRegistration]) -> bool:
+        # Auto-loaded JS/TS entries have no proven package provenance in this adapter.
+        for directory in {self.root, *(path.parent for path in self.config_paths)}:
+            for name in ('plugin', 'plugins'):
+                folder = directory / name
+                if folder.is_symlink() or (folder.exists() and not folder.is_dir()):
+                    return False
+                if folder.is_dir() and any(path.suffix in ('.js', '.ts') for path in folder.iterdir()):
+                    return False
+        if any(r.config_key != 'plugin' or r.evidence == 'native-control' for r in registrations):
+            return False
+        if len({registration.native_id for registration in registrations}) != len(registrations):
+            return False
+        roots = [
+            registration.root.resolve(strict=False)
+            for registration in registrations
+            if registration.evidence == "native-root" and registration.root is not None
+        ]
+        return len(roots) == len(set(roots))
+
+    def _remove_exact_registration(self, native_id: str) -> None:
+        matches = []
+        contents = {}
+        for path in self.config_paths:
+            if not path.exists():
+                if path.is_symlink():
+                    raise NativeCLIError("OpenCode configuration path is unsafe")
+                continue
+            original = _read_config_text(path)
+            contents[path] = original
+            matches.extend((path, *match) for match in _find_opencode_string_entries(
+                path, native_id, text=original
+            ))
+        if len(matches) != 1:
+            raise NativeCLIError("OpenCode exact plugin registration is ambiguous or absent")
+        path, start, end, previous_comma, following_comma = matches[0]
+        if path.parent != self.root:
+            raise NativeCLIError('Owned OpenCode registration moved outside the target configuration root')
+        original = contents[path]
+        spans = [(start, end)]
+        if following_comma is not None:
+            spans.append((following_comma, following_comma + 1))
+        elif previous_comma is not None:
+            spans.append((previous_comma, previous_comma + 1))
+        updated = _remove_spans(original, spans)
+        try:
+            json.loads(strip_jsonc(updated), object_pairs_hook=_object_without_duplicate_keys)
+        except (ValueError, UnicodeError, json.JSONDecodeError) as error:
+            raise NativeCLIError("OpenCode configuration cannot be safely rewritten") from error
+        mode = stat.S_IMODE(path.stat().st_mode)
+        if _read_config_text(path) != original:
+            raise NativeCLIError('OpenCode configuration changed before removal')
+        atomic_write_text(path, updated)
+        try:
+            path.chmod(mode)
+        except OSError as error:
+            raise NativeCLIError("OpenCode configuration permissions could not be preserved") from error
+
+
 def _explicit_root(value: Path | str) -> Path:
     root = Path(value)
     if not root.is_absolute() or root == Path(root.anchor):
@@ -791,6 +1083,189 @@ def _explicit_root(value: Path | str) -> Path:
     if any(path.is_symlink() for path in (root, *root.parents)):
         raise ValueError("native adapter root may not contain symlinks")
     return root
+
+
+def _read_config_text(path: Path) -> str:
+    try:
+        if (not path.is_absolute() or path.is_symlink() or not path.is_file()
+                or path.stat().st_size > _MAX_JSON_BYTES
+                or any(parent.is_symlink() for parent in (path, *path.parents))):
+            raise NativeCLIError("OpenCode configuration path is unsafe")
+        with path.open('r', encoding='utf-8', newline='') as stream:
+            return stream.read()
+    except NativeCLIError:
+        raise
+    except (OSError, UnicodeError) as error:
+        raise NativeCLIError("OpenCode configuration could not be read") from error
+
+
+def _find_opencode_string_entries(path: Path, expected: str, *, text: str | None = None):
+    if not path.exists():
+        if path.is_symlink():
+            raise NativeCLIError("OpenCode configuration path is unsafe")
+        return ()
+    if text is None:
+        text = _read_config_text(path)
+    try:
+        arrays = _jsonc_named_arrays(text, {"plugin", "plugins"})
+    except (NativeCLIError, ValueError, UnicodeError) as error:
+        raise NativeCLIError("OpenCode configuration cannot be safely parsed") from error
+    matches = []
+    for items in arrays:
+        for start, end, previous_comma, following_comma, value, kind in items:
+            if kind == "string" and value == expected:
+                matches.append((start, end, previous_comma, following_comma))
+    return tuple(matches)
+
+
+def _jsonc_named_arrays(text: str, names: set[str]):
+    index = _jsonc_skip(text, 0)
+    if index >= len(text) or text[index] != "{":
+        raise ValueError("configuration must be an object")
+    index += 1
+    arrays = []
+    while True:
+        index = _jsonc_skip(text, index)
+        if index >= len(text):
+            raise ValueError("configuration object is unterminated")
+        if text[index] == "}":
+            return arrays
+        key, index = _jsonc_string(text, index)
+        index = _jsonc_skip(text, index)
+        if index >= len(text) or text[index] != ":":
+            raise ValueError("configuration key has no value")
+        index = _jsonc_skip(text, index + 1)
+        if key in names:
+            if index >= len(text) or text[index] != "[":
+                raise ValueError("native plugin declaration is not an array")
+            items, index = _jsonc_array_items(text, index)
+            arrays.append(items)
+        else:
+            index = _jsonc_value_end(text, index)
+        index = _jsonc_skip(text, index)
+        if index < len(text) and text[index] == ",":
+            index += 1
+            continue
+        if index < len(text) and text[index] == "}":
+            return arrays
+        raise ValueError("configuration object has an invalid separator")
+
+
+def _jsonc_array_items(text: str, index: int):
+    index += 1
+    items = []
+    previous_comma = None
+    while True:
+        index = _jsonc_skip(text, index)
+        if index >= len(text):
+            raise ValueError("native plugin array is unterminated")
+        if text[index] == "]":
+            return items, index + 1
+        start = index
+        if text[index] == '"':
+            value, end = _jsonc_string(text, index)
+            kind = "string"
+        else:
+            end = _jsonc_value_end(text, index)
+            value = None
+            kind = "other"
+        separator = _jsonc_skip(text, end)
+        following_comma = separator if separator < len(text) and text[separator] == "," else None
+        items.append((start, end, previous_comma, following_comma, value, kind))
+        if following_comma is not None:
+            previous_comma = following_comma
+            index = following_comma + 1
+            continue
+        if separator < len(text) and text[separator] == "]":
+            return items, separator + 1
+        raise ValueError("native plugin array has an invalid separator")
+
+
+def _jsonc_string(text: str, index: int):
+    if index >= len(text) or text[index] != '"':
+        raise ValueError("expected a JSON string")
+    cursor = index + 1
+    escaped = False
+    while cursor < len(text):
+        character = text[cursor]
+        if escaped:
+            escaped = False
+        elif character == "\\":
+            escaped = True
+        elif character == '"':
+            try:
+                return json.loads(text[index:cursor + 1]), cursor + 1
+            except json.JSONDecodeError as error:
+                raise ValueError("invalid JSON string") from error
+        cursor += 1
+    raise ValueError("JSON string is unterminated")
+
+
+def _jsonc_value_end(text: str, index: int):
+    if index >= len(text):
+        raise ValueError("missing JSON value")
+    if text[index] == '"':
+        _value, return_index = _jsonc_string(text, index)
+        return return_index
+    if text[index] not in "[{":
+        cursor = index
+        while cursor < len(text) and text[cursor] not in ",]}" and text[cursor] not in "\r\n":
+            cursor += 1
+        if cursor == index:
+            raise ValueError("missing JSON value")
+        return cursor
+    stack = ["]" if text[index] == "[" else "}"]
+    cursor = index + 1
+    while stack:
+        cursor = _jsonc_skip(text, cursor)
+        if cursor >= len(text):
+            raise ValueError("nested JSON value is unterminated")
+        if text[cursor] == '"':
+            _value, cursor = _jsonc_string(text, cursor)
+            continue
+        if text[cursor] in "[{":
+            stack.append("]" if text[cursor] == "[" else "}")
+            cursor += 1
+            continue
+        if text[cursor] in "]}":
+            if text[cursor] != stack[-1]:
+                raise ValueError("nested JSON value has mismatched delimiters")
+            stack.pop()
+            cursor += 1
+            continue
+        cursor += 1
+    return cursor
+
+
+def _jsonc_skip(text: str, index: int):
+    while index < len(text):
+        if text[index].isspace():
+            index += 1
+            continue
+        if text.startswith("//", index):
+            newline = text.find("\n", index + 2)
+            index = len(text) if newline < 0 else newline + 1
+            continue
+        if text.startswith("/*", index):
+            end = text.find("*/", index + 2)
+            if end < 0:
+                raise ValueError("JSONC block comment is unterminated")
+            index = end + 2
+            continue
+        break
+    return index
+
+
+def _remove_spans(text: str, spans: Sequence[tuple[int, int]]) -> str:
+    result = text
+    for start, end in sorted(spans, reverse=True):
+        result = result[:start] + result[end:]
+    return result
+
+
+def _debug_lists_plugin(output: str, native_id: str) -> bool:
+    clean = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", output)
+    return any(line.strip() == "- " + native_id for line in clean.splitlines())
 
 
 def _optional_entry_path(value: Mapping[str, Any]) -> Path | None:

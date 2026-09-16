@@ -11,8 +11,8 @@ uninstall or plugin code runs here. Task05 remains the sole package authority.
 | Claude `.claude-plugin/plugin.json` | `native-local`: whole directory under `<Claude home>/skills/skill-manager-<package-id-prefix>`; native identifier from the manifest, `<name>@skills-dir` | Future Task07 places a complete owned copy; Claude discovers it in place. This is Claude's documented **whole-plugin** loader, not an individual Skill copy. | Enable/disable with `claude plugin enable/disable <name>@skills-dir`; removal is deletion of only the owned whole directory, not marketplace uninstall. Replace only an owned whole copy for update; `/reload-plugins` or new session. Verify plugin list/errors and expected namespaced behavior in an isolated session. |
 | Cursor `.cursor-plugin/plugin.json` or standard root `plugin.json` | `native-local`: complete copy under `<Cursor home>/plugins/local/skill-manager-<package-id-prefix>` | Cursor discovers this directory after reload. External symlink targets are skipped, so a symlink to the central Task05 artifact is **not** a strategy. | Local import policy must permit it, including Enterprise restrictions. Reload Window then verify Customize and runtime behavior. No documented headless lifecycle CLI; moving/removing an owned local copy and reloading needs Task07 runtime proof, otherwise manual lifecycle. Marketplace/UI lifecycle remains separate. |
 | Codex `.codex-plugin/plugin.json` or standard root `plugin.json` | `native-install`: private local marketplace root below `<CODEX_HOME>/skill-manager-marketplaces/<unique-name>`; manifest at **`.agents/plugins/marketplace.json`**, then `codex plugin marketplace add <root>` and `codex plugin add <plugin>@<marketplace> --json` | Task07 would stage one complete owned package under the marketplace root and let the native plugin store install it. No component reconstruction. | `[plugins."name@marketplace"].enabled` controls enablement; `codex plugin remove` removes the native install/cache. Updating requires the selected managed snapshot and native add flow, with runtime verification in a new thread. `codex plugin list --json` exposes installed identifiers and declared sources, not proof of loaded bytes. |
-| OpenCode, **explicitly proven** OpenCode distribution/source | `native-install`: v2 `plugins` registration with exact npm version or `github:owner/repo#<full-commit>::path:<subdir>` when applicable | Native package loader maintains its own package/cache copy. No direct central-artifact mutation or local-entrypoint guess. | Remove only the owned registration; v2 ID controls can enable/disable verified IDs. Exact pins are skipped by automatic package update; a later managed snapshot requires explicit reconciliation. Verify active plugin/source and representative behavior in an isolated runtime. |
-| Any format without sufficient evidence, policy/version support or safe target | `manual/unsupported`, no actions | No copying/conversion fallback | Explicit blockers; no guessed registration or package family. |
+| OpenCode, declared server export or explicit OpenCode distribution | `native-install`: stage the whole snapshot under `<root>/skill-manager-packages/<id-prefix>` and register its exact file URI using `opencode plugin <URI> --global` | Native loader reads the owned whole copy via singular `plugin` configuration. No component extraction. | Replace the owned directory for update; remove only its exact registration and owned directory. No automatic enable/disable. Fresh native checks and unchanged source/registration proof are required. |
+| Any format without sufficient evidence, mechanism/policy support or safe target | `manual/unsupported`, no actions | No copying/conversion fallback | Explicit blockers; no guessed registration or package family. |
 
 Claude's `--plugin-dir`/`--plugin-url` flags are session-only testing surfaces, not
 the selected persistent mechanism. Claude marketplace installation is another
@@ -36,22 +36,21 @@ The marketplace source is `{ "source": "local", "path": "./plugins/<id-prefix>" 
 relative to the marketplace **root**, not to `.agents/plugins`. A bare root
 `marketplace.json` is not a supported Codex marketplace layout.
 
-## OpenCode version distinction
+## OpenCode native contract (Task09A correction)
 
-Current v2 docs use plural `plugins`. The old `packages/opencode/src/plugin/shared.ts`
-and its `./server`/`./tui` export rules are **not evidence for the v2 loader**.
-At pinned commit `e03db9bc6908f75c9334d8aa997deeaac81c0298`, actual v2 code is under
-`packages/core/src`. Its external loader imports a module with a default `id`
-and `setup` or `effect`, and uses the native npm service for package specs.
+The earlier separate-product assumption is superseded by actual installed-runtime
+evidence. OpenCode 1.18.31 accepts singular `plugin` file-URI package directories,
+resolves `exports["./server"]` (including import/default conditions), and supports
+`main` for explicitly proven OpenCode distributions. The fixture exports a default
+object with `id` and `server()`. Auto-discovery of a package directory beneath
+`plugins/` was not proven; the explicit native registration is used instead.
 
-There is observable drift between the v2 web docs and that source snapshot,
-including local-directory discovery/import details and SDK spelling. Accordingly,
-the planner does not infer v2 compatibility from `package.json.main`, a package
-name, SDK dependency or old TUI export. An explicit harness-scoped Task05
-distribution or exact native registration is required as native intent, and the
-caller must positively verify mechanism availability for the selected package
-and actual target version. Unknown cases stay manual. No new source provider or
-native capability parser is introduced.
+Version strings do not grant or deny deployment. The adapter checks the native
+plugin command and actual global configuration binding. Source snapshots remain
+pinned under Task05. Exact external copies/registrations are not claimed; unknown
+auto-loaded JS/TS plugins, controls and ambiguous inventory block mutation.
+The existing ownership ledger protects both whole-copy identity and registration
+origin. No source model or compatibility registry is added.
 
 ## Planner contract
 
@@ -66,7 +65,7 @@ the Task05 record/fingerprint and never saves another package/source model.
   references, and occupied native namespace identifiers;
 - `inventory_complete` (default false);
 - `mechanism_available` (default unknown): positive evidence that the selected
-  package/route is supported by the installed version **and** allowed by policy.
+  package/route's actual mechanism is available **and** allowed by policy.
 
 Neither flag is inferred from an empty config file or the existence of a binary.
 Task07 must gather fresh evidence before executing anything. No full native
@@ -139,21 +138,20 @@ OPENCODE_CONFIG_DIR point inside that sandbox. Supply only a verified sandbox
 binary PATH. Do not inherit OPENCODE_CONFIG, CONFIG_CONTENT, authentication,
 NODE_OPTIONS, BUN preload options or host package-manager settings.
 
-The pinned v2 global module creates XDG data/config/state and temporary directories
-at import time. `Global.make` uses CONFIG_DIR for its config service; v2 config
-also searches ancestor project documents. Older config code treats custom config
-inputs differently. Thus neither CONFIG nor CONFIG_DIR is a universal isolation
-switch, and the planner does not rely on the legacy project-disable flag.
+OpenCode creates native state during startup and can search ancestor project
+configuration. Neither CONFIG nor CONFIG_DIR alone is an isolation boundary.
+Task09A therefore retains the complete disposable HOME/XDG/filesystem sandbox.
+Its dependency-free verifier makes only the disposable config directory read-only
+during runtime inspection to avoid automatic SDK bootstrap. Production code never
+changes user directory permissions or claims dependency bootstrap was tested.
 
-Tests prove the route contains no inherited secrets, produces no writes/processes,
-and keeps existing static config-adapter reads inside fixture paths. **No live
-OpenCode/container isolation run is claimed.** Runtime containment and actual
-loading must be verified under Task07's approved isolated execution.
+The planner itself remains read-only. `verify_opencode_package_lifecycle.py` now
+exercises real native registration/loading/update/removal and before/after hashes;
+runtime writes are confined to disposable state.
 
 ## Sources checked during Task06
 
 - [Claude plugins](https://code.claude.com/docs/en/plugins), [persistent skills-directory loader](https://code.claude.com/docs/en/plugins-reference#skills-directory-plugins), [marketplaces](https://code.claude.com/docs/en/plugin-marketplaces).
 - [Cursor plugins/local testing and policy](https://cursor.com/docs/plugins), [format reference](https://cursor.com/docs/reference/plugins).
 - Codex commit `a8964cb1bad67bc26a826fb07d1bef99c6a3f008`: [CLI](https://github.com/openai/codex/blob/a8964cb1bad67bc26a826fb07d1bef99c6a3f008/codex-rs/cli/src/plugin_cmd.rs), [marketplace layouts/source paths](https://github.com/openai/codex/blob/a8964cb1bad67bc26a826fb07d1bef99c6a3f008/codex-rs/core-plugins/src/marketplace.rs), [manifest precedence/hooks](https://github.com/openai/codex/blob/a8964cb1bad67bc26a826fb07d1bef99c6a3f008/codex-rs/core-plugins/src/manifest.rs), [manager install/store path](https://github.com/openai/codex/blob/a8964cb1bad67bc26a826fb07d1bef99c6a3f008/codex-rs/core-plugins/src/manager.rs).
-- [OpenCode v2 plugins](https://opencode.ai/v2/docs/plugins), [config](https://opencode.ai/v2/docs/config), [plugin lifecycle](https://opencode.ai/v2/docs/build/plugins).
-- OpenCode commit `e03db9bc6908f75c9334d8aa997deeaac81c0298`: [v2 global paths](https://github.com/anomalyco/opencode/blob/e03db9bc6908f75c9334d8aa997deeaac81c0298/packages/core/src/global.ts), [v2 config discovery](https://github.com/anomalyco/opencode/blob/e03db9bc6908f75c9334d8aa997deeaac81c0298/packages/core/src/config.ts), [v2 external loader](https://github.com/anomalyco/opencode/blob/e03db9bc6908f75c9334d8aa997deeaac81c0298/packages/core/src/config/plugin/external.ts).
+- [OpenCode plugins](https://opencode.ai/docs/plugins), [configuration](https://opencode.ai/docs/config); actual installed command help and isolated Task09A runtime evidence take precedence over incompatible documentation snapshots.

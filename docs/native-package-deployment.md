@@ -22,7 +22,7 @@ service.remove(deployment_id, adapter)
 ```
 
 The example's availability flag is a **verified prerequisite**, not a switch to
-skip checks. Check the actual native version, applicable policy and complete
+skip checks. Check the actual native mechanism, applicable policy and complete
 inventory first. CLI adapters default to unavailable and invoke no runner until
 availability is confirmed. Runners must target the supplied home/configuration,
 be bounded/non-interactive, and avoid importing unrelated user configuration.
@@ -47,7 +47,7 @@ from a name. Separate harness distributions use the planner's selected managed I
 | Claude | Whole-copy native-local placement; native enable/disable; owned whole-directory update/remove | Real Claude **2.1.269** `plugin list --json` confirms identity, exact `installPath`, version and enablement. `plugin details` confirmed Skill, agent and SessionStart hook. Missing native path is not inferred from a name. |
 | Cursor | Same whole-copy local engine, requiring a verified native inspector/verifier | No Cursor runtime/GUI exists on this host. The default read-only adapter remains Manual; local import policy and actual GUI inventory must be verified before opting in. No invented CLI or alternate disabled directory. Fixture tests cover the complete copy/remove/distribution path. |
 | Codex | Whole local marketplace under the Task06 namespace, first-party marketplace add/plugin add/remove, complete source update | Real **0.154.0** CLI verifies registered marketplace source, installed package and native cache bytes. Native `skills/list` and `plugin/read` confirmed the updated namespaced Skill and hook. Enable/disable changes only the owned explicit TOML boolean, preserving other bytes and file mode; unfamiliar TOML layout is manual. |
-| OpenCode | Manual / read-only on this host | Installed **1.18.30** was inspected in isolation. Its compatibility with Task06's v2 pinned-registration contract is unproved. No legacy installer substitution, pinned-registration mutation, dependency download or user cache reuse was added. The service rejects OpenCode mutation even if a synthetic plan describes a supported v2 registration. |
+| OpenCode | Whole-copy staging and native global `plugin <file-URI> --global` registration | Task09A verified actual **1.18.31** loading, update and removal in disposable state. Uses singular `plugin`, not a separate product/version assumption. Native mechanism/global-root checks replace version gates. No enable/disable control is exposed; incomplete inventory stays Manual. |
 
 Native clients may need reload/new sessions after changes. Registration/cache
 verification is not a claim that arbitrary plugin code or a model turn ran.

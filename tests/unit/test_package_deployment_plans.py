@@ -25,6 +25,10 @@ class PackageDeploymentPlanTests(unittest.TestCase):
             directory = artifact / f'.{harness}-plugin'
             directory.mkdir(parents=True)
             (directory / 'plugin.json').write_text('{"name":"example"}')
+        (artifact / 'package.json').write_text(json.dumps({
+            'name': 'example', 'exports': {'./server': './server.js'},
+        }))
+        (artifact / 'server.js').write_text('export default {}')
         resolution = PackageResolution('resolved', 'skill',
             source=PackageSource('github', 'github:example/package', revision='a' * 40, package_path='.'),
             artifact_root=artifact, capabilities=SourcePackageDiscovery().inspect_root(artifact)['package'])
@@ -94,10 +98,13 @@ class PackageDeploymentPlanTests(unittest.TestCase):
         plan = self.planner.plan(family['id'], self.target('opencode'))
         self.assertEqual(plan.strategy, 'native-install')
         self.assertEqual(plan.support, 'supported', plan.blockers)
-        self.assertEqual(plan.surface['configKey'], 'plugins')
-        self.assertEqual(plan.actions[0]['packageSpec'], 'github:example/package#' + 'a' * 40)
+        self.assertEqual(plan.surface['configKey'], 'plugin')
+        self.assertEqual(plan.actions[0]['packageSpec'], Path(plan.surface['path']).as_uri())
 
     def test_main_or_name_does_not_prove_opencode_native_intent(self):
+        (Path(self.record['artifactRoot']) / 'package.json').write_text(
+            json.dumps({'name': 'example', 'main': './server.js'})
+        )
         plan = self.planner.plan(self.record['id'], replace(self.target('opencode'), registrations=(
             NativeRegistration('example'),)))
         self.assertEqual(plan.strategy, 'manual/unsupported')
@@ -114,6 +121,7 @@ class PackageDeploymentPlanTests(unittest.TestCase):
         self.assertEqual(plan.ownership, 'external-existing')
         self.assertEqual(plan.actions, [])
         self.assertEqual(plan.strategy, 'native-install')
+        self.assertEqual(plan.surface['configKey'], 'plugin')
         self.assertEqual(config.read_bytes(), before)
         self.assertNotIn('never-output', repr(plan))
 

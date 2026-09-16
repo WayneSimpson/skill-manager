@@ -11,10 +11,12 @@ from unittest.mock import patch
 import stat
 
 from skill_manager.application.skills.package_deployment import PackageDeploymentPlan
+from skill_manager.application.skills.managed_packages import package_fingerprint
 from skill_manager.application.skills.native_package_cli import (
     ClaudeNativePackageAdapter,
     CodexNativePackageAdapter,
     NativeCLIError,
+    OpenCodeNativePackageAdapter,
 )
 
 
@@ -58,6 +60,22 @@ def codex_plan(root: Path, *, native_id: str = "example@skill-manager-aaaaaaaaaa
         },
         "marketplaceArgv": ["codex", "plugin", "marketplace", "add", str(marketplace_root), '--json'],
         "installArgv": ["codex", "plugin", "add", native_id, "--json"],
+    }
+    return plan
+
+
+def opencode_plan(root: Path) -> PackageDeploymentPlan:
+    destination = root / "skill-manager-packages" / PACKAGE_ID[:16]
+    plan = PackageDeploymentPlan(PACKAGE_ID, "opencode", {})
+    plan.strategy = "native-install"
+    plan.support = "supported"
+    plan.actions = [{"action": "native-register-whole-package", "unit": "whole-package"}]
+    plan.surface = {
+        "path": str(destination),
+        "nativeId": destination.as_uri(),
+        "packageSpec": destination.as_uri(),
+        "configKey": "plugin",
+        "scope": "global",
     }
     return plan
 
@@ -418,6 +436,130 @@ class NativePackageCLITests(unittest.TestCase):
         adapter = CodexNativePackageAdapter(self.root, lambda argv: completed(argv))
         with self.assertRaises(NativeCLIError):
             adapter.set_enabled(codex_plan(self.root), True)
+
+    def test_opencode_install_and_uninstall_use_exact_file_url_registration(self) -> None:
+        self.root.mkdir(parents=True)
+        plan = opencode_plan(self.root)
+        destination = Path(plan.surface["path"])
+        destination.mkdir(parents=True)
+        (destination / "package.json").write_text(
+            '{"name":"example","exports":{"./server":"./server.js"}}', encoding="utf-8"
+        )
+        (destination / "server.js").write_text("export default {}", encoding="utf-8")
+        plan.fingerprint = package_fingerprint(destination)
+        config = self.root / "opencode.json"
+        calls: list[list[str]] = []
+        installed = False
+
+        def runner(argv: list[str]):
+            nonlocal installed
+            calls.append(argv)
+            if argv[1:3] == ["plugin", plan.surface["packageSpec"]]:
+                installed = True
+                config.write_text(json.dumps({"plugin": [plan.surface["nativeId"]]}), encoding="utf-8")
+            if argv[1:3] == ["debug", "info"]:
+                current = config.read_text(encoding="utf-8") if config.exists() else ""
+                listed = installed and plan.surface["nativeId"] in current
+                return completed(argv, f"plugins:\n" + (f"- {plan.surface['nativeId']}\n" if listed else ""))
+            return completed(argv)
+
+        adapter = OpenCodeNativePackageAdapter(
+            self.root, runner, config_paths=(config,), mechanism_available=True
+        )
+        plan.ownership = "absent"
+        self.assertTrue(adapter.install(plan)["verified"])
+        plan.ownership = "managed"
+        self.assertTrue(adapter.uninstall(plan)["verified"])
+        self.assertTrue(destination.is_dir())
+        self.assertEqual(
+            calls,
+            [
+                ["opencode", "plugin", plan.surface["packageSpec"], "--global"],
+                ["opencode", "debug", "info", "--print-logs", "--log-level", "ERROR"],
+                ["opencode", "debug", "info", "--print-logs", "--log-level", "ERROR"],
+                ["opencode", "debug", "info", "--print-logs", "--log-level", "ERROR"],
+            ],
+        )
+
+    def test_opencode_uninstall_preserves_unrelated_jsonc_bytes_and_mode(self) -> None:
+        self.root.mkdir(parents=True)
+        plan = opencode_plan(self.root)
+        destination = Path(plan.surface["path"])
+        destination.mkdir(parents=True)
+        (destination / "package.json").write_text(
+            '{"name":"example","exports":{"./server":"./server.js"}}', encoding="utf-8"
+        )
+        (destination / "server.js").write_text("export default {}", encoding="utf-8")
+        plan.fingerprint = package_fingerprint(destination)
+        external = "file:///tmp/external-opencode-plugin"
+        original = (
+            '{\n  // Keep this comment and external registration.\n'
+            f'  "plugin": ["{external}",\n    "{plan.surface["nativeId"]}"\n  ],\n'
+            '  "other": {"keep": true}\n}\n'
+        ).replace('\n', '\r\n')
+        config = self.root / "opencode.jsonc"
+        config.write_bytes(original.encode('utf-8'))
+        config.chmod(0o640)
+        adapter = OpenCodeNativePackageAdapter(
+            self.root,
+            lambda argv: completed(
+                argv,
+                "plugins:\n- " + plan.surface["nativeId"] + "\n"
+                if plan.surface["nativeId"] in config.read_text(encoding="utf-8")
+                else "plugins:\n",
+            ),
+            config_paths=(config,),
+            mechanism_available=True,
+        )
+        plan.ownership = "managed"
+        adapter.uninstall(plan)
+        self.assertEqual(
+            config.read_bytes(),
+            original.replace(f',\r\n    "{plan.surface["nativeId"]}"', "\r\n    ").encode('utf-8'),
+        )
+        self.assertEqual(stat.S_IMODE(config.stat().st_mode), 0o640)
+
+    def test_opencode_auto_loaded_file_blocks_incomplete_inventory(self):
+        (self.root / 'plugins').mkdir(parents=True)
+        (self.root / 'plugins/external.ts').write_text('export default async () => ({})')
+        def runner(argv):
+            return completed(argv, 'config '+str(self.root)+'\n' if argv[1:3] == ['debug','paths']
+                             else 'opencode plugin <module> --global')
+        adapter = OpenCodeNativePackageAdapter(self.root, runner, mechanism_available=True)
+        self.assertFalse(adapter.inspect('a'*64).inventory_complete)
+
+    def test_opencode_stderr_loader_error_does_not_verify_a_listed_registration(self):
+        self.root.mkdir(parents=True)
+        plan = opencode_plan(self.root)
+        destination = Path(plan.surface['path'])
+        destination.mkdir(parents=True)
+        plan.fingerprint = package_fingerprint(destination)
+        (self.root / 'opencode.json').write_text(json.dumps({'plugin':[plan.surface['nativeId']]}))
+        adapter = OpenCodeNativePackageAdapter(self.root, lambda argv: subprocess.CompletedProcess(
+            argv, 0, 'plugins:\n- '+plan.surface['nativeId']+'\n', 'level=ERROR plugin failed'), mechanism_available=True)
+        self.assertFalse(adapter.verify(plan, 'present')['verified'])
+
+    def test_opencode_owned_registration_origin_cannot_move_silently(self):
+        self.root.mkdir(parents=True)
+        plan = opencode_plan(self.root)
+        destination = Path(plan.surface['path'])
+        destination.mkdir(parents=True)
+        plan.fingerprint = package_fingerprint(destination)
+        config = self.root / 'opencode.json'
+        config.write_text(json.dumps({'plugin':[plan.surface['nativeId']]}))
+        def runner(argv):
+            if argv[1:3] == ['debug','paths']:
+                return completed(argv, 'config '+str(self.root)+'\n')
+            if argv[1:3] == ['plugin','--help']:
+                return completed(argv, 'opencode plugin <module> --global')
+            return completed(argv, 'plugins:\n- '+plan.surface['nativeId']+'\n')
+        adapter = OpenCodeNativePackageAdapter(self.root, runner, mechanism_available=True)
+        proof = adapter.verify(plan, 'present')
+        deployment = {'deploymentId':'owned', 'nativeId':plan.surface['nativeId'], 'target':str(destination),
+                      'nativeFingerprint':proof['nativeFingerprint']}
+        self.assertEqual(adapter.inspect('a'*64, deployment).registrations[0].deployment_id, 'owned')
+        config.rename(self.root / 'opencode.jsonc')
+        self.assertIsNone(adapter.inspect('a'*64, deployment).registrations[0].deployment_id)
 
 
 if __name__ == "__main__":

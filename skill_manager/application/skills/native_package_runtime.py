@@ -4,7 +4,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 import os
 from pathlib import Path
-import re
 import stat
 import subprocess
 from tempfile import TemporaryDirectory
@@ -15,6 +14,7 @@ from .native_package_cli import (
     ClaudeNativePackageAdapter,
     CodexNativePackageAdapter,
     NativeCLIError,
+    OpenCodeNativePackageAdapter,
     ReadOnlyNativePackageAdapter,
 )
 from .package_deployment_service import NativePackageAdapter
@@ -24,22 +24,11 @@ from skill_manager.opencode.resolver import opencode_config_paths
 
 PACKAGE_DEPLOYMENT_HARNESSES = ("claude", "codex", "cursor", "opencode")
 
-_VERIFIED_NATIVE_VERSIONS = {
-    "claude": "2.1.269",
-    "codex": "0.154.0",
-}
-_VERSION_OUTPUT_PATTERNS = {
-    "claude": re.compile(r"(?P<version>\d+\.\d+\.\d+) \(Claude Code\)\Z"),
-    "codex": re.compile(r"(?:codex(?:-cli)?\s+)?v?(?P<version>\d+\.\d+\.\d+)\Z", re.IGNORECASE),
-}
-
-
 @dataclass(frozen=True)
 class NativePackageRuntimeConfig:
     harness: str
     root: Path
     executable: Path
-    expected_version: str | None = None
     timeout_seconds: float = 30.0
 
 
@@ -52,7 +41,27 @@ class NativePackageAdapterFactory:
 
     def __call__(self, harness: str) -> NativePackageAdapter:
         if harness == 'opencode':
-            return _OpenCodeReadOnlyAdapter(self._default_root(harness), opencode_config_paths(self.kernel.context))
+            configured_root = self.env.get(_key(harness, "ROOT"))
+            if configured_root:
+                try:
+                    root = _explicit_root(configured_root)
+                except ValueError:
+                    return _OpenCodeReadOnlyAdapter(self._default_root(harness), opencode_config_paths(self.kernel.context))
+                config_paths = _opencode_config_paths(root)
+            else:
+                root = self._default_root(harness)
+                config_paths = (root / 'config.json', *opencode_config_paths(self.kernel.context))
+            config = self._config(harness, root)
+            if config is None:
+                return _OpenCodeReadOnlyAdapter(root, config_paths)
+            adapter = OpenCodeNativePackageAdapter(
+                config.root,
+                _BoundedNativeRunner(config),
+                config_paths=config_paths,
+                mechanism_available=True,
+            )
+            adapter.executable = str(config.executable)
+            return adapter
         configured_root = self.env.get(_key(harness, "ROOT"))
         if configured_root:
             try:
@@ -93,7 +102,7 @@ class NativePackageAdapterFactory:
                 values.append("native-root-unavailable")
         if harness not in PACKAGE_DEPLOYMENT_HARNESSES:
             values.append("unsupported-harness")
-        elif harness not in {"claude", "codex"}:
+        elif harness not in {"claude", "codex", "opencode"}:
             values.append("native-mutation-not-enabled-for-harness")
         elif root is not None:
             if not self.env.get(_key(harness, "EXECUTABLE")):
@@ -103,15 +112,12 @@ class NativePackageAdapterFactory:
                     _explicit_executable(self.env[_key(harness, "EXECUTABLE")])
                 except ValueError:
                     values.append("native-executable-is-not-a-safe-file")
-            expected_version = self.env.get(_key(harness, "EXPECTED_VERSION"))
-            if expected_version and expected_version != _VERIFIED_NATIVE_VERSIONS.get(harness):
-                values.append("native-version-policy-not-supported")
             if self.env.get(_key(harness, "ALLOW_MUTATION"), "").casefold() != "true":
                 values.append("native-mutation-policy-not-enabled")
         return tuple(dict.fromkeys(values))
 
     def _config(self, harness: str, root: Path) -> NativePackageRuntimeConfig | None:
-        if harness not in {"claude", "codex"}:
+        if harness not in {"claude", "codex", "opencode"}:
             return None
         if self.env.get(_key(harness, "ALLOW_MUTATION"), "").casefold() != "true":
             return None
@@ -122,14 +128,10 @@ class NativePackageAdapterFactory:
             executable = _explicit_executable(value)
         except ValueError:
             return None
-        expected_version = self.env.get(_key(harness, "EXPECTED_VERSION")) or None
-        if expected_version is not None and expected_version != _VERIFIED_NATIVE_VERSIONS[harness]:
-            return None
         return NativePackageRuntimeConfig(
             harness=harness,
             root=root,
             executable=executable,
-            expected_version=expected_version,
         )
 
     def _default_root(self, harness: str) -> Path:
@@ -169,7 +171,6 @@ class _BoundedNativeRunner:
 
     def __init__(self, config: NativePackageRuntimeConfig) -> None:
         self.config = config
-        self._version_checked = False
         self._environment = {
             "PATH": os.pathsep.join((str(config.executable.parent), "/usr/bin", "/bin")),
             "LANG": "C.UTF-8",
@@ -179,24 +180,7 @@ class _BoundedNativeRunner:
         command = list(argv)
         if not command or command[0] != str(self.config.executable):
             raise NativeCLIError("native CLI command must use the configured executable")
-        self._verify_version()
         return self._run(command)
-
-    def _verify_version(self) -> None:
-        if self._version_checked:
-            return
-        try:
-            result = self._run([str(self.config.executable), "--version"])
-        except (OSError, subprocess.SubprocessError) as error:
-            raise NativeCLIError("native version probe failed") from error
-        if result.returncode != 0:
-            raise NativeCLIError("native version could not be verified")
-        actual_version = _parse_verified_version(self.config.harness, result.stdout)
-        if actual_version is None:
-            raise NativeCLIError("native version could not be verified")
-        if self.config.expected_version and actual_version != self.config.expected_version:
-            raise NativeCLIError("native version does not match configured policy")
-        self._version_checked = True
 
     def _run(self, command: list[str]) -> subprocess.CompletedProcess[str]:
         try:
@@ -224,6 +208,13 @@ class _BoundedNativeRunner:
                 environment["CLAUDE_CONFIG_DIR"] = str(self.config.root)
             elif self.config.harness == "codex":
                 environment["CODEX_HOME"] = str(self.config.root)
+            elif self.config.harness == "opencode":
+                # OpenCode's global plugin command follows this config root;
+                # debug info verification proves the binding used by the CLI.
+                environment["XDG_CONFIG_HOME"] = str(self.config.root.parent)
+                environment["OPENCODE_CONFIG_DIR"] = str(self.config.root)
+                environment['OPENCODE_DISABLE_MODELS_FETCH'] = 'true'
+                environment['OPENCODE_DISABLE_AUTOUPDATE'] = 'true'
             return subprocess.run(
                 command,
                 cwd=str(runtime_root / "workspace"),
@@ -273,19 +264,8 @@ def _explicit_executable(value: str) -> Path:
     return executable
 
 
-def _parse_verified_version(harness: str, output: str | bytes | None) -> str | None:
-    if isinstance(output, bytes):
-        try:
-            output = output.decode("utf-8")
-        except UnicodeDecodeError:
-            return None
-    if not isinstance(output, str):
-        return None
-    match = _VERSION_OUTPUT_PATTERNS.get(harness, re.compile(r"\A\Z")).fullmatch(output.strip())
-    if match is None:
-        return None
-    version = match.group("version")
-    return version if version == _VERIFIED_NATIVE_VERSIONS.get(harness) else None
+def _opencode_config_paths(root: Path) -> tuple[Path, ...]:
+    return root / "config.json", root / "opencode.json", root / "opencode.jsonc"
 
 
 __all__ = ["PACKAGE_DEPLOYMENT_HARNESSES", "NativePackageAdapterFactory", "NativePackageRuntimeConfig"]

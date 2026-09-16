@@ -1,4 +1,4 @@
-"""Read-only whole-package preflight. Task05 remains the only package authority."""
+"""Whole-package preflight. Task05 remains the only package authority."""
 from __future__ import annotations
 
 from copy import deepcopy
@@ -19,7 +19,7 @@ EVIDENCE = {
     'claude': 'https://code.claude.com/docs/en/plugins-reference#skills-directory-plugins',
     'cursor': 'https://cursor.com/docs/plugins#test-plugins-locally',
     'codex': 'https://github.com/openai/codex/blob/a8964cb1bad67bc26a826fb07d1bef99c6a3f008/codex-rs/cli/src/plugin_cmd.rs',
-    'opencode': 'https://opencode.ai/v2/docs/plugins',
+    'opencode': 'https://opencode.ai/docs/plugins',
 }
 
 
@@ -32,6 +32,11 @@ class NativeRegistration:
     # Present only when a deployment adapter can reconcile a live native entry
     # to Skill Manager's persisted deployment record.
     deployment_id: str | None = None
+    # Exact source text and declaration location, when the native config exposes it.
+    raw: str | None = None
+    config_path: Path | None = None
+    config_key: str | None = None
+    value_kind: Literal['string', 'object'] = 'string'
 
 
 @dataclass(frozen=True)
@@ -41,7 +46,7 @@ class NativeTarget:
     root: Path
     registrations: tuple[NativeRegistration, ...] = ()
     inventory_complete: bool = False
-    # Includes installed-version support and local-import/enterprise policy.
+    # Includes the required native mechanism and local policy.
     mechanism_available: bool | None = None
     occupied_identifiers: tuple[str, ...] = ()
 
@@ -94,6 +99,13 @@ def _source_identifier(source: dict) -> str:
 def _safe_directory_target(root: Path) -> bool:
     return root.is_absolute() and root != Path(root.anchor) and not any(
         p.is_symlink() or (p.exists() and not p.is_dir()) for p in (root, *root.parents))
+
+
+def _same_path(left: Path, right: Path) -> bool:
+    try:
+        return left.resolve(strict=False) == right.resolve(strict=False)
+    except (OSError, RuntimeError, ValueError):
+        return False
 
 
 def _manifest_name(record: dict, relative: str) -> str:
@@ -166,7 +178,7 @@ class PackageDeploymentPlanner:
             plan.blockers.append('native-inventory-incomplete')
             plan.ownership = 'conflict'
         if target.mechanism_available is not True:
-            plan.blockers.append('native-version-or-policy-unverified')
+            plan.blockers.append('native-mechanism-or-policy-unverified')
         if any(item.evidence == 'native-control' for item in target.registrations):
             plan.ownership = 'conflict'
             plan.blockers.append('native-controls-need-reconciliation')
@@ -184,6 +196,20 @@ class PackageDeploymentPlanner:
 
         try:
             matches = [item for item in target.registrations if self._matches(item, selected)]
+            if target.harness == 'opencode':
+                expected_path = target.root / 'skill-manager-packages' / selected['id'][:16]
+                expected_uri = expected_path.as_uri()
+                matches.extend(
+                    item for item in target.registrations
+                    if item not in matches
+                    and (item.native_id == expected_uri
+                         or (item.root is not None and _same_path(item.root, expected_path)))
+                )
+                # Exact whole-copy equality can block a duplicate, never establish ownership.
+                if selected['fingerprint']:
+                    matches.extend(item for item in target.registrations if item not in matches
+                        and item.evidence == 'native-root' and item.root is not None and item.root.is_dir()
+                        and package_fingerprint(item.root) == selected['fingerprint'])
         except (OSError, ValueError, RuntimeError):
             plan.ownership = 'conflict'
             plan.requires_reconciliation = True
@@ -211,7 +237,15 @@ class PackageDeploymentPlanner:
             plan.blockers.append('external-observation-needs-native-reconciliation')
 
         try:
-            self._strategy(plan, selected, target, native_intent=bool(relationships or matches))
+            self._strategy(
+                plan,
+                selected,
+                target,
+                native_intent=bool(relationships or matches),
+                explicit_opencode_intent=any(
+                    item.get('harness') == 'opencode' for item in relationships
+                ),
+            )
         except (OSError, ValueError, RuntimeError):
             plan.strategy = 'manual/unsupported'
             plan.blockers.append('native-format-unreadable')
@@ -274,9 +308,10 @@ class PackageDeploymentPlanner:
             return any(
                 item.native_id == deployment['nativeId']
                 and item.evidence == 'native-root'
+                and (target.harness != 'opencode' or (item.value_kind == 'string' and item.config_key == 'plugin'))
                 and item.root is not None
                 and item.root.resolve() == destination.resolve()
-                and (item.deployment_id == deployment['deploymentId'] if target.harness == 'codex'
+                and (item.deployment_id == deployment['deploymentId'] if target.harness in ('codex', 'opencode')
                      else item.deployment_id in (None, deployment['deploymentId']))
                 for item in target.registrations
             )
@@ -288,18 +323,42 @@ class PackageDeploymentPlanner:
         if plan.strategy != deployment.get('strategy'):
             plan.blockers.append('managed-strategy-changed')
             return
-        if plan.strategy not in ('native-local', 'native-install') or target.harness == 'opencode':
+        if plan.strategy not in ('native-local', 'native-install'):
             plan.blockers.append('managed-native-strategy-unsupported')
             return
         native_id = plan.surface.get('nativeId')
         if target.harness == 'codex':
             native_id = native_id.split('@')[0] + '@' + deployment['nativeId'].split('@')[1]
+        elif target.harness == 'opencode':
+            native_id = deployment['nativeId']
         if native_id != deployment.get('nativeId'):
             plan.blockers.append('managed-native-identifier-changed')
             return
         destination = Path(deployment['target'])
         if destination.is_symlink() or not destination.resolve().is_relative_to(target.root.resolve()):
             plan.blockers.append('unsafe-managed-target')
+            return
+        if target.harness == 'opencode':
+            placement = deployment.get('placementPackageId') or deployment.get('selectedPackageId')
+            expected = (
+                target.root / 'skill-manager-packages' / placement[:16]
+                if isinstance(placement, str) and re.fullmatch(r'[0-9a-f]{64}', placement)
+                else None
+            )
+            if expected is None or not _same_path(destination, expected) or deployment['nativeId'] != destination.as_uri():
+                plan.blockers.append('managed-opencode-placement-changed')
+                return
+            plan.surface.update(
+                path=str(destination),
+                nativeId=deployment['nativeId'],
+                packageSpec=deployment['nativeId'],
+                configKey='plugin',
+                scope='global',
+                loader='opencode-plugin-file-url-global',
+                placementPackageId=placement,
+            )
+            plan.actions = [{'action': 'reconcile-whole-package', 'unit': 'whole-package',
+                             'managedPackageId': plan.selected_package_id, 'destination': str(destination)}]
             return
         plan.surface['path'] = str(destination)
         plan.surface['placementPackageId'] = deployment.get('placementPackageId', deployment['selectedPackageId'])
@@ -318,7 +377,7 @@ class PackageDeploymentPlanner:
                          'managedPackageId': plan.selected_package_id, 'destination': str(destination)}]
 
     @staticmethod
-    def _strategy(plan, record, target, *, native_intent):
+    def _strategy(plan, record, target, *, native_intent, explicit_opencode_intent=False):
         manifests = (record['capabilities'] or {}).get('manifests', [])
         paths = {item['path'] for item in manifests
                  if item['evidence'] != 'unresolved'}
@@ -384,27 +443,33 @@ class PackageDeploymentPlanner:
                 ]
                 plan.rationale = 'Codex installs an authored package from a local native marketplace into its own cache.'
             return
-        # A main field, package name or SDK dependency alone is not OpenCode native proof.
-        if not native_intent:
-            plan.blockers.append('opencode-native-intent-unproven')
+        # A package name or generic executable metadata is not OpenCode native proof.
+        server_entry = _opencode_server_entry(record, allow_main=explicit_opencode_intent)
+        if server_entry is None:
+            plan.blockers.append(
+                'opencode-native-intent-unproven' if not native_intent
+                else 'opencode-native-server-entry-unproven'
+            )
             return
         source = record['source']
-        if source['kind'] == 'npm' and source.get('version'):
-            spec = source['locator'].removeprefix('npm:')
-        elif source['kind'] == 'github' and re.fullmatch('[0-9a-f]{40}', source.get('revision') or ''):
-            spec = source['locator'] + '#' + source['revision']
-            if source.get('package_path') not in (None, '.'):
-                spec += '::path:' + source['package_path']
-        else:
+        if not ((source['kind'] == 'npm' and source.get('version'))
+                or (source['kind'] == 'github' and re.fullmatch('[0-9a-f]{40}', source.get('revision') or ''))):
             plan.blockers.append('native-install-source-not-pinned')
             return
         plan.strategy = 'native-install'
-        plan.surface = {'nativeId': _source_identifier(source), 'configPath': str(target.root / 'opencode.jsonc'),
-                        'configKey': 'plugins', 'packageSpec': spec, 'scope': 'user',
-                        'loader': 'opencode-v2-package-registration'}
+        destination = target.root / 'skill-manager-packages' / suffix
+        package_spec = destination.as_uri()
+        plan.surface = {
+            'path': str(destination),
+            'nativeId': package_spec,
+            'packageSpec': package_spec,
+            'configKey': 'plugin',
+            'scope': 'global',
+            'loader': 'opencode-plugin-file-url-global',
+        }
         plan.actions = [{'action': 'native-register-whole-package', 'unit': 'whole-package',
-                         'managedPackageId': record['id'], 'packageSpec': spec}]
-        plan.rationale = 'Explicit proven OpenCode distribution; pinned native package registration, with a native cache copy.'
+                         'managedPackageId': record['id'], 'packageSpec': package_spec}]
+        plan.rationale = 'Register the staged whole package through OpenCode global file-URL plugins.'
 
 
 def opencode_isolation(root: Path) -> dict:
@@ -438,10 +503,14 @@ def read_opencode_registrations(paths: tuple[Path, ...]) -> tuple[NativeRegistra
             if path.is_symlink():
                 raise ValueError('Unreadable native config')
             continue
-        if path.is_symlink() or not path.is_file() or path.stat().st_size > 1024 * 1024:
+        if (path.is_symlink() or not path.is_file() or path.stat().st_size > 1024 * 1024
+                or any(item.is_symlink() for item in (path, *path.parents))):
             raise ValueError('Unsafe native config')
         try:
-            data = json.loads(strip_jsonc(path.read_text(encoding='utf-8')))
+            data = json.loads(
+                strip_jsonc(path.read_text(encoding='utf-8')),
+                object_pairs_hook=_object_without_duplicate_keys,
+            )
         except (ValueError, UnicodeError) as error:
             raise ValueError('Invalid native config') from error
         if not isinstance(data, dict):
@@ -453,13 +522,17 @@ def read_opencode_registrations(paths: tuple[Path, ...]) -> tuple[NativeRegistra
                 raise ValueError('Invalid native plugin list')
             for item in items:
                 spec = item.get('package') if isinstance(item, dict) else item
+                value_kind = 'string' if isinstance(item, str) else 'object'
                 if isinstance(spec, list) and spec:
                     spec = spec[0]  # legacy [package, options]
                 if not isinstance(spec, str):
                     raise ValueError('Invalid native plugin entry')
                 if spec.startswith('-') or spec == '*':
                     # Controls address runtime IDs/patterns, not authoritative package coordinates.
-                    registrations.append(NativeRegistration('unreconciled-control', 'native-control'))
+                    registrations.append(NativeRegistration(
+                        'unreconciled-control', 'native-control', raw=spec,
+                        config_path=path, config_key=key, value_kind=value_kind,
+                    ))
                     continue
                 if spec.startswith(('./', '../', '/', 'file://')):
                     value = urlsplit(spec) if spec.startswith('file://') else None
@@ -468,7 +541,12 @@ def read_opencode_registrations(paths: tuple[Path, ...]) -> tuple[NativeRegistra
                     root = Path(unquote(value.path) if value else spec)
                     if not root.is_absolute():
                         root = path.parent / root
-                    registrations.append(NativeRegistration('local-source', 'native-root', root=root.resolve()))
+                    if any(item.is_symlink() for item in (root, *root.parents)):
+                        raise ValueError('Unsafe native package path')
+                    registrations.append(NativeRegistration(
+                        spec, 'native-root', root=root.resolve(), raw=spec,
+                        config_path=path, config_key=key, value_kind=value_kind,
+                    ))
                     continue
                 git = re.fullmatch(r'github:([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)(?:#([a-f0-9]{40}))?(?:::path:([^?#]+))?', spec)
                 npm = re.fullmatch(r'((?:@[a-z0-9_.-]+/)?[a-z0-9_.-]+)(?:@(\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?))?', spec)
@@ -482,5 +560,62 @@ def read_opencode_registrations(paths: tuple[Path, ...]) -> tuple[NativeRegistra
                 else:
                     # Unknown specs cannot prove absence; do not return possible embedded credentials.
                     raise ValueError('Native plugin source needs manual reconciliation')
-                registrations.append(NativeRegistration(_source_identifier(asdict(source)), 'native-source', source))
+                registrations.append(NativeRegistration(
+                    _source_identifier(asdict(source)), 'native-source', source,
+                    raw=spec, config_path=path, config_key=key, value_kind=value_kind,
+                ))
     return tuple(registrations)
+
+
+def _object_without_duplicate_keys(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError('Duplicate native configuration key')
+        result[key] = value
+    return result
+
+
+def _opencode_server_entry(record: dict, *, allow_main: bool) -> Path | None:
+    """Return a bounded, declared OpenCode server entry, never a guessed file."""
+    root_value = record.get('artifactRoot')
+    if not isinstance(root_value, str):
+        return None
+    root = Path(root_value)
+    package_json = root / 'package.json'
+    try:
+        if (not root.is_absolute() or not root.is_dir() or root.is_symlink()
+                or package_json.is_symlink() or not package_json.is_file()
+                or package_json.stat().st_size > 1024 * 1024
+                or any(item.is_symlink() for item in (root, *root.parents))):
+            return None
+        payload = json.loads(
+            package_json.read_text(encoding='utf-8'),
+            object_pairs_hook=_object_without_duplicate_keys,
+        )
+    except (OSError, UnicodeError, ValueError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    entry = None
+    exports = payload.get('exports')
+    if isinstance(exports, dict):
+        entry = exports.get('./server')
+        if isinstance(entry, dict):
+            entry = next((entry[key] for key in ('import', 'default') if isinstance(entry.get(key), str)), None)
+    if entry is None and allow_main:
+        entry = payload.get('main')
+    if not isinstance(entry, str) or not entry or entry.startswith(('/', '\\')):
+        return None
+    relative = Path(entry)
+    if entry.startswith(('file:', '\0')) or '\\' in entry or '..' in relative.parts:
+        return None
+    candidate = root / relative
+    try:
+        if (not candidate.is_file() or candidate.is_symlink()
+                or not candidate.resolve(strict=True).is_relative_to(root.resolve(strict=True))
+                or any(item.is_symlink() for item in (candidate, *candidate.parents))):
+            return None
+    except (OSError, RuntimeError, ValueError):
+        return None
+    return candidate

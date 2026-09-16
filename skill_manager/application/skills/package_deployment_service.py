@@ -125,7 +125,7 @@ class PackageDeploymentService:
                 self._check_stage(stage, target_fingerprint, staged_identity)
                 self._move_new_snapshot(stage, destination)
                 try:
-                    if checked_plan.target_harness == 'codex':
+                    if checked_plan.target_harness in ('codex', 'opencode'):
                         self._require_adapter_method(adapter, 'install', checked_plan, 'Native installation is unavailable.')
                         native_started = True
                         try:
@@ -221,7 +221,7 @@ class PackageDeploymentService:
                     self._restore_backup(destination, backup, old_fingerprint, existing['targetIdentity'])
                     raise
                 try:
-                    if plan.target_harness == 'codex':
+                    if plan.target_harness in ('codex', 'opencode'):
                         self._require_adapter_method(adapter, 'reinstall', plan, 'Native update is unavailable.')
                         try:
                             adapter.reinstall(plan)
@@ -295,7 +295,7 @@ class PackageDeploymentService:
             self._same_target(plan, checked_plan, checked_target)
             destination = self._planned_destination(checked_plan)
             self._prove_target(destination, existing)
-            if checked_plan.target_harness == 'codex':
+            if checked_plan.target_harness in ('codex', 'opencode'):
                 self._require_adapter_method(adapter, 'uninstall', checked_plan, 'Native removal is unavailable.')
                 try:
                     adapter.uninstall(checked_plan)
@@ -388,7 +388,7 @@ class PackageDeploymentService:
 
     @staticmethod
     def _require_mutable_local(plan: PackageDeploymentPlan, *, managed: bool) -> None:
-        supported_route = (plan.strategy == 'native-local' and plan.target_harness in ('claude', 'cursor')) or (plan.strategy == 'native-install' and plan.target_harness == 'codex')
+        supported_route = (plan.strategy == 'native-local' and plan.target_harness in ('claude', 'cursor')) or (plan.strategy == 'native-install' and plan.target_harness in ('codex', 'opencode'))
         if plan.blockers or not plan.actions or plan.support != 'supported' or not supported_route:
             reason = ', '.join(plan.blockers) or 'manual-native-strategy'
             raise PackageDeploymentError(f'Native package deployment is blocked: {reason}', plan=plan)

@@ -50,9 +50,9 @@ ID. The server performs a fresh plan and reconciliation before mutating a
 target. Browser-supplied plans, roots, executables, and native identifiers are
 not accepted.
 
-Cursor and OpenCode remain read-only until a verified native mutation
-mechanism is available. External or unverified installations are reported with
-guidance rather than taken over or deleted.
+Cursor remains Manual without verified GUI/policy support. OpenCode registers
+a staged whole package through its native global file-URL mechanism. External
+or unverified installations are reported without takeover or deletion.
 
 ## HTTP and runtime setup
 
@@ -79,20 +79,21 @@ blocked under Task07; the UI does not clear those safeguards or apply candidates
 Unscoped publisher source links are not presented as native harness support.
 
 Native execution is opt-in server configuration, never a browser-supplied path.
-For Claude or Codex, an operator may configure:
+For Claude, Codex or OpenCode, an operator may configure:
 
 ```text
-SKILL_MANAGER_NATIVE_<CLAUDE|CODEX>_EXECUTABLE=<absolute verified raw binary>
-SKILL_MANAGER_NATIVE_<CLAUDE|CODEX>_ROOT=<intended native configuration directory>
-SKILL_MANAGER_NATIVE_<CLAUDE|CODEX>_ALLOW_MUTATION=true
+SKILL_MANAGER_NATIVE_<CLAUDE|CODEX|OPENCODE>_EXECUTABLE=<absolute verified raw binary>
+SKILL_MANAGER_NATIVE_<CLAUDE|CODEX|OPENCODE>_ROOT=<intended native configuration directory>
+SKILL_MANAGER_NATIVE_<CLAUDE|CODEX|OPENCODE>_ALLOW_MUTATION=true
 ```
 
 If ROOT is omitted, the existing harness configuration binding supplies it.
-The optional `EXPECTED_VERSION` must match the accepted tested version: Claude
-2.1.269 or Codex 0.154.0. Actual version output is checked exactly, and native
-inventory must still pass Task07 checks. Other versions stay Manual. The current
-runner supports raw Linux ELF binaries only; scripts, command wrappers and linked
-paths are rejected. No executable is discovered or invoked automatically.
+Native support is determined by the actual mechanism, complete native inventory,
+and adapter schema/provenance checks. Version output may be retained as
+diagnostic evidence, but a version string is not a permission gate; unknown or
+newer versions are not blocked solely for that reason. The current runner
+supports raw Linux ELF binaries only; scripts, command wrappers and linked paths
+are rejected. No executable is discovered or invoked automatically.
 
 The runner uses a 30-second timeout, no stdin/shell, an explicit environment and
 a temporary HOME/XDG/temp/working directory. `CLAUDE_CONFIG_DIR` or `CODEX_HOME`
@@ -100,9 +101,17 @@ binds only the intended configuration. This prevents ambient credentials/preload
 and project working-directory inheritance; it is **not a filesystem/network
 sandbox**. Explicit configuration authorizes native inventory queries as well as
 later user-confirmed writes. No such setting was enabled for the real user during
-Task08 validation. Cursor has no default executor; OpenCode remains read-only,
-considering all known legacy/XDG config declarations conservatively without
-claiming complete runtime inventory.
+Task08 validation. Cursor has no default executor. OpenCode checks the actual
+global config binding and plugin command, then registers the whole owned directory
+with the singular `plugin` key. Updates retain its exact URI. Removal deletes only
+that recorded string, preserving other JSONC bytes, comments and order.
+Registration-origin proof uses the existing optional native fingerprint; the
+ledger format is unchanged. Auto-loaded JS/TS plugin files and unresolved controls
+block incomplete inventory. No OpenCode enable/disable control is offered.
+A fresh native process must report the registration without initialization errors.
+The isolated verifier uses a read-only disposable config during runtime inspection
+to avoid SDK dependency bootstrap. Production code never changes user permissions;
+dependency-bearing packages require a working native dependency environment.
 
 ## Validation boundary
 

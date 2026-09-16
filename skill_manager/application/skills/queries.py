@@ -275,11 +275,11 @@ class SkillsQueryService:
             enabled=deployment.get("enabled") if deployment and state in {'installed', 'enabled', 'disabled'} else None,
             blockers=blockers,
             preflight=_preflight(plan, diagnostics),
-            actions=_actions(plan, deployment, state),
+            actions=_actions(plan, deployment, state, adapter),
         )
         selected = self.managed_packages.get(plan.selected_package_id) if plan.selected_package_id else None
         payload['source'] = selected['source'] if selected else None
-        if deployment is not None and payload['actions'] and not blockers:
+        if deployment is not None and payload['actions'] and not blockers and callable(getattr(adapter, "reinstall", None)):
             payload['replacementOptions'] = self._replacement_options(package_id, deployment, adapter)
             if payload['replacementOptions']:
                 payload['actions'].append('update')
@@ -500,7 +500,7 @@ def _deployment_state(plan, deployment: dict | None, reconcile_state: str | None
         return "external-existing"
     if _has_stale_blocker(plan.blockers):
         return "stale"
-    if set(plan.blockers) <= {'native-inventory-incomplete', 'native-version-or-policy-unverified',
+    if set(plan.blockers) <= {'native-inventory-incomplete', 'native-mechanism-or-policy-unverified',
                               'no-proven-native-format', 'opencode-native-intent-unproven'} and plan.blockers:
         return 'manual'
     if deployment is not None:
@@ -528,14 +528,17 @@ def _has_stale_blocker(blockers: list[str]) -> bool:
     )
 
 
-def _actions(plan, deployment: dict | None, state: str) -> tuple[str, ...]:
+def _actions(plan, deployment: dict | None, state: str, adapter=None) -> tuple[str, ...]:
     if plan.blockers or plan.support != "supported" or not plan.actions:
         return ()
     if deployment is None and state == "absent" and plan.ownership == "absent":
         return ("deploy",)
     if deployment is not None and state in {"installed", "enabled", "disabled"} and plan.ownership == "managed":
-        toggle = "disable" if deployment.get("enabled") is True else "enable"
-        return (toggle, "remove")
+        actions = []
+        if (adapter is None or callable(getattr(adapter, "set_enabled", None))) and deployment.get("enabled") in {True, False}:
+            actions.append("disable" if deployment.get("enabled") is True else "enable")
+        actions.append("remove")
+        return tuple(actions)
     return ()
 
 

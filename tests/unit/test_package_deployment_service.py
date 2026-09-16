@@ -5,6 +5,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 import shutil
+import subprocess
 from unittest.mock import patch
 
 from skill_manager.application.skills.managed_packages import ManagedPackageStore
@@ -70,7 +71,7 @@ class PackageDeploymentServiceTests(unittest.TestCase):
         self.record = self._adopt('a' * 40, 'source-a', 'initial')
         self.service = PackageDeploymentService(self.store, PackageDeploymentPlanner(self.store))
 
-    def _adopt(self, revision, locator, content):
+    def _adopt(self, revision, locator, content, *, opencode=False):
         artifact = self.root / f'acquired-{revision[:4]}'
         (artifact / '.claude-plugin').mkdir(parents=True)
         (artifact / '.cursor-plugin').mkdir()
@@ -82,6 +83,11 @@ class PackageDeploymentServiceTests(unittest.TestCase):
         (artifact / 'agents/example-agent.md').write_text('agent\n')
         (artifact / 'rules/example-rule.md').write_text('rule\n')
         (artifact / 'payload.txt').write_text(content)
+        if opencode:
+            (artifact / 'package.json').write_text(
+                '{"name":"example","exports":{"./server":"./server.js"}}'
+            )
+            (artifact / 'server.js').write_text('export default {}')
         resolution = PackageResolution(
             'resolved', 'skill-ref',
             source=PackageSource('github', f'github:example/{locator}', revision=revision, package_path='.'),
@@ -226,6 +232,67 @@ class PackageDeploymentServiceTests(unittest.TestCase):
             self.service.deploy(self.record['id'], adapter)
         self.assertEqual(config.read_bytes(), before)
         self.assertEqual(self.service.list_deployments(), {})
+
+    def test_opencode_deploy_and_remove_register_only_the_owned_file_url(self):
+        record = self._adopt('c' * 40, 'opencode', 'initial', opencode=True)
+        root = self.root / 'native' / 'opencode'
+        root.mkdir(parents=True)
+        config = root / 'opencode.json'
+        installed = False
+        native_id = None
+
+        def runner(argv):
+            nonlocal installed, native_id
+            if argv[1:] == ['debug', 'paths']:
+                return subprocess.CompletedProcess(argv, 0, 'config '+str(root)+'\n', '')
+            if argv[1:] == ['plugin', '--help']:
+                return subprocess.CompletedProcess(argv, 0, '', 'opencode plugin <module> --global')
+            if len(argv) == 4 and argv[1] == 'plugin' and argv[3] == '--global':
+                installed = True
+                native_id = argv[2]
+                config.parent.mkdir(parents=True, exist_ok=True)
+                config.write_text('{"plugin":["' + native_id + '"]}')
+            if argv[1:3] == ['debug', 'info']:
+                current = config.read_text() if config.exists() else ''
+                return subprocess.CompletedProcess(argv, 0, 'plugins:\n' + ('- ' + native_id + '\n' if installed and native_id in current else ''), '')
+            return subprocess.CompletedProcess(argv, 0, '', '')
+
+        from skill_manager.application.skills.native_package_cli import OpenCodeNativePackageAdapter
+        adapter = OpenCodeNativePackageAdapter(root, runner, config_paths=(config,), mechanism_available=True)
+        deployed = self.service.deploy(record['id'], adapter)['deployment']
+        self.assertTrue(Path(deployed['target']).is_dir())
+        self.assertTrue(config.is_file())
+        replacement = self._adopt('d' * 40, 'opencode-next', 'updated', opencode=True)
+        updated = self.service.update(deployed['deploymentId'], replacement['id'], adapter)['deployment']
+        self.assertEqual(updated['selectedPackageId'], replacement['id'])
+        self.assertEqual((Path(updated['target']) / 'payload.txt').read_text(), 'updated')
+        removed = self.service.remove(updated['deploymentId'], adapter)
+        self.assertTrue(removed['verified'])
+        self.assertFalse(Path(deployed['target']).exists())
+        self.assertEqual(config.read_text(), '{"plugin":[]}')
+
+    def test_opencode_external_whole_copy_is_not_duplicated(self):
+        from skill_manager.application.skills.native_package_cli import OpenCodeNativePackageAdapter
+        record = self._adopt('c'*40, 'opencode', 'initial', opencode=True)
+        root = self.root / 'native/opencode'
+        root.mkdir(parents=True)
+        external = self.root / 'external-package'
+        shutil.copytree(record['artifactRoot'], external)
+        config = root / 'opencode.json'
+        config.write_text('{"plugin":["'+external.as_uri()+'"]}')
+        before = config.read_bytes()
+        calls = []
+        def runner(argv):
+            calls.append(argv)
+            output = 'config '+str(root)+'\n' if argv[1:3] == ['debug','paths'] else 'opencode plugin <module> --global'
+            return subprocess.CompletedProcess(argv, 0, output, '')
+        adapter = OpenCodeNativePackageAdapter(root, runner, mechanism_available=True)
+        with self.assertRaises(PackageDeploymentError) as failure:
+            self.service.deploy(record['id'], adapter)
+        self.assertEqual(failure.exception.plan.ownership, 'external-existing')
+        self.assertEqual(config.read_bytes(), before)
+        self.assertFalse((root / 'skill-manager-packages').exists())
+        self.assertTrue(all('--help' in call or call[1:3] == ['debug','paths'] for call in calls))
 
     def test_separate_distributions_deploy_only_selected_snapshots(self):
         from skill_manager.application.skills.package_resolution import DistributionRelationship

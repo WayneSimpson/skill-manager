@@ -4,10 +4,27 @@ from unittest.mock import Mock, patch
 import unittest
 
 from skill_manager.application.skills.package_deployment_service import PackageDeploymentError
-from skill_manager.application.skills.queries import SkillsQueryService
+from skill_manager.application.skills.package_deployment import PackageDeploymentPlan
+from skill_manager.application.skills.queries import SkillsQueryService, _actions
 
 
 class PackageQueryDeploymentTests(unittest.TestCase):
+    def test_opencode_actions_do_not_advertise_unsupported_enable_toggle(self) -> None:
+        plan = PackageDeploymentPlan("a" * 64, "opencode", {})
+        plan.strategy = "native-install"
+        plan.support = "supported"
+        plan.ownership = "managed"
+        plan.actions = [{"action": "reconcile-whole-package"}]
+
+        class OpenCodeAdapter:
+            def uninstall(self):
+                pass
+
+        self.assertEqual(
+            _actions(plan, {"enabled": None}, "installed", OpenCodeAdapter()),
+            ("remove",),
+        )
+
     def test_update_returns_deployments_for_replacement_package(self) -> None:
         old_package_id = "a" * 64
         replacement_package_id = "b" * 64
