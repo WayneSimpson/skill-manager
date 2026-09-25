@@ -49,3 +49,13 @@ Run the relevant backend and frontend checks, tests, linting, type checks, and b
 ## Documentation Boundary
 
 This file defines how agents work on the project. PRDs, implementation plans, acceptance criteria, and feature-specific requirements belong in ClickUp and/or `docs/`.
+
+
+## Protected OpenCode Development State
+
+When developing or testing OpenCode configuration-management features, treat the user's real OpenCode configuration and active OpenCode runtime as protected state.
+
+- Use isolated/disposable OpenCode configuration roots and fixture agents for automated development and validation.
+- Do not modify real OpenCode configuration, create or alter real agents, reload OpenCode, restart OpenCode, or otherwise mutate the active development environment unless the current ClickUp task explicitly requires supervised real-environment validation and Wayne has approved that specific operation.
+- Any approved real configuration mutation must use a recoverable backup, concurrent-change detection, validation, atomic write behaviour, and a rollback path.
+- Saving configuration and applying it to the running OpenCode instance are separate operations. Never reload or restart OpenCode automatically as a side effect of saving or testing.
