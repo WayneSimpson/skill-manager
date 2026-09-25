@@ -215,6 +215,15 @@ Prove the complete workflow against real harness behaviour.
 **10 - Final documentation and support matrix**
 Document only the capabilities actually verified.
 
+**11 - OpenCode agent discovery and read-only UI**
+Discover configured OpenCode agents from the supported effective configuration sources and expose their current configuration without mutating the active development environment.
+
+**12 - Safe OpenCode agent create/edit management**
+Add guarded creation and editing with validation, backups, concurrent-change detection, atomic writes, preservation of unknown configuration, and safe JSON/JSONC round-tripping.
+
+**13 - Apply/reload lifecycle and isolated verification**
+Separate saving configuration from applying it to OpenCode. Prefer supported configuration reload over process restart, require explicit user confirmation before either action, and prove the lifecycle in isolated/disposable OpenCode configuration before any supervised real-environment validation.
+
 This sequence expresses the programme direction only.
 
 The detailed requirements and acceptance criteria for each stage belong in ClickUp.
@@ -325,3 +334,144 @@ If a programme-level assumption changes:
 4. then continue implementation.
 
 This keeps the PRD focused on the durable direction while allowing ClickUp to remain the detailed and evolving execution record.
+
+
+## 16. OpenCode Agent Configuration Management
+
+### Purpose
+
+Skill Manager should provide a first-class management layer for OpenCode agents/sub-agents configured through OpenCode configuration.
+
+The user should be able to inspect configured agents and, where safely supported, create and edit them from Skill Manager without manually editing OpenCode configuration files.
+
+This capability builds on the OpenCode configuration-discovery foundation established by Tasks 01 and 04. It must reuse the existing deterministic OpenCode JSON/JSONC path selection, parsing and mutation behaviour rather than creating a second configuration system.
+
+### Supported configuration sources
+
+The feature must support the OpenCode configuration sources already recognised by the project, including current JSON and JSONC forms.
+
+At minimum this includes:
+
+- `${XDG_CONFIG_HOME}/opencode/opencode.jsonc`;
+- `${XDG_CONFIG_HOME}/opencode/opencode.json`;
+- supported legacy locations already handled by the shared resolver.
+
+Configuration precedence, selected write target and JSONC preservation must remain deterministic.
+
+### Agent information
+
+For each configured OpenCode agent, Skill Manager should expose the OpenCode-supported fields required for practical management, including where present:
+
+- agent name;
+- description;
+- prompt/instructions;
+- model;
+- model variant/reasoning setting;
+- mode, including sub-agent mode;
+- other relevant configuration needed to preserve the existing agent definition safely.
+
+The UI must preserve unknown or currently unsupported fields rather than discarding them.
+
+Model reasoning/effort choices must not be hard-coded globally. Available model variants differ between models/providers; Skill Manager should use authoritative OpenCode/model metadata where available and preserve existing unknown/custom values.
+
+### Read-first safety model
+
+The active OpenCode configuration and runtime are protected state.
+
+Discovery and read-only display must not mutate OpenCode configuration, restart OpenCode, reload OpenCode, create test agents in the real configuration, or take ownership of external agent definitions.
+
+Automated development and testing must use isolated/disposable OpenCode configuration roots and fixture agents rather than the active user configuration.
+
+Agents discovered from configuration sources that Skill Manager does not yet safely mutate, including externally managed agent files where applicable, may be shown read-only until an explicit management contract exists.
+
+### Safe mutation model
+
+Editing in the UI does not immediately mutate or reload the active OpenCode runtime.
+
+The intended lifecycle is:
+
+**Read -> Edit draft -> Validate -> Preview diff -> Save configuration -> Explicit Apply**
+
+Before any real configuration write, Skill Manager must:
+
+1. re-read the selected configuration source;
+2. confirm it has not changed since the user began editing;
+3. block and require reconciliation if the source changed concurrently;
+4. create a recoverable backup outside the active OpenCode configuration directory;
+5. protect backup permissions appropriately because OpenCode configuration may contain sensitive values;
+6. generate the updated document while preserving unrelated/unknown configuration and JSONC behaviour;
+7. validate the complete resulting configuration;
+8. write atomically using a temporary file followed by replacement;
+9. verify the resulting file can be read back successfully.
+
+A failure at any point must leave the original configuration usable and provide a recoverable rollback path.
+
+The initial implementation should support safe view, create and edit operations. Destructive deletion is outside the initial slice unless separately reviewed and approved.
+
+New agents created through this workflow must be explicitly created as OpenCode sub-agents rather than relying on an implicit/default mode.
+
+### Apply, reload and restart
+
+Saving configuration and applying configuration to the running OpenCode instance are separate user actions.
+
+Skill Manager must capability-detect the safest supported OpenCode apply mechanism.
+
+Where OpenCode supports a safe configuration reload, reload is preferred over restarting the process.
+
+Skill Manager must never reload or restart OpenCode automatically after saving a change.
+
+Before reload, the user must receive a clear warning that active sessions may observe changed agent configuration and must explicitly confirm.
+
+If a process restart is genuinely required, it is a fallback only. The UI must clearly warn that active OpenCode sessions may be interrupted and require explicit user confirmation immediately before the restart.
+
+During development of this feature, no real OpenCode reload or restart may be performed merely to prove implementation. Real-runtime validation must first be demonstrated against isolated/disposable configuration and may only touch the active development runtime when the current ClickUp task explicitly calls for supervised validation and Wayne has approved that specific operation.
+
+### Concurrency and self-protection
+
+Skill Manager may be developed by the same OpenCode installation it can manage. The product and delivery process must therefore protect against self-disruption.
+
+The implementation must not:
+
+- use the active development agents as mutation fixtures;
+- rewrite the whole OpenCode configuration from an incomplete internal model;
+- silently replace concurrent user/OpenCode/tool changes;
+- reload or restart OpenCode as a side effect of tests;
+- create duplicate configuration sources where a selected supported source already exists;
+- infer ownership merely because an agent was discovered.
+
+Real user state remains authoritative unless an explicit, validated Skill Manager mutation is confirmed by the user.
+
+### User experience
+
+The initial Agents area should make it easy to:
+
+- view all supported configured agents;
+- inspect their description, instructions, model and model variant/reasoning setting;
+- distinguish editable managed configuration from external/read-only definitions;
+- create a new sub-agent safely;
+- edit an existing supported agent;
+- review the exact intended changes before save;
+- understand whether saved changes are pending application;
+- explicitly reload/apply the configuration where supported;
+- understand when a restart is required and what will be interrupted.
+
+The UI should not expose raw configuration complexity where a clear field-based editor is sufficient, but the resulting configuration must remain faithful to OpenCode's model.
+
+### Validation
+
+Before this capability is considered complete, verification must include:
+
+- JSON and JSONC fixtures;
+- deterministic path and precedence behaviour;
+- comment/unknown-field preservation for JSONC;
+- model and variant round-trip behaviour;
+- create and edit flows;
+- stale/concurrent source detection;
+- backup creation and rollback;
+- atomic write failure handling;
+- no-change/no-op handling;
+- isolated reload/apply verification where supported;
+- restart confirmation/fallback behaviour without unapproved restart of the active development OpenCode instance;
+- proof that unrelated Skills, MCPs, plugins, providers and other OpenCode configuration remain unchanged.
+
+The active user configuration must not be used as an automated test fixture.
