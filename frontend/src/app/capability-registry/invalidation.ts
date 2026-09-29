@@ -1,5 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 
+import { invalidateAgentQueries } from "../../features/agents/public";
 import { invalidateMarketplaceQueries } from "../../features/marketplace/public";
 import { invalidateMcpQueries } from "../../features/mcp/public";
 import { invalidateSettingsQueries } from "../../features/settings/public";
@@ -13,5 +14,6 @@ export async function invalidateCapabilityQueries(queryClient: QueryClient): Pro
     invalidateSettingsQueries(queryClient),
     invalidateMarketplaceQueries(queryClient),
     invalidateSlashCommandQueries(queryClient),
+    invalidateAgentQueries(queryClient),
   ]);
 }

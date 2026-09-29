@@ -23,6 +23,7 @@ const englishCommonCopy = {
     skills: "Skills",
     slashCommands: "Slash Commands",
     mcpServers: "MCP Servers",
+    openCodeAgents: "OpenCode Agents",
     marketplace: "Marketplace",
     clis: "CLIs",
     settings: "Settings",
@@ -46,6 +47,7 @@ const englishCommonCopy = {
     marketplace: "Loading marketplace",
     slashCommands: "Loading slash commands",
     settings: "Loading settings",
+    agents: "Loading OpenCode agents",
     document: "Loading document",
   },
   search: {
@@ -91,6 +93,7 @@ export const commonCopy = {
       skills: "Skill",
       slashCommands: "Slash command",
       mcpServers: "MCP 服务器",
+      openCodeAgents: "OpenCode Agent",
       marketplace: "商城",
       clis: "CLI",
       settings: "设置",
@@ -114,6 +117,7 @@ export const commonCopy = {
       marketplace: "正在加载商城",
       slashCommands: "正在加载 Slash command",
       settings: "正在加载设置",
+      agents: "正在加载 OpenCode agent",
       document: "正在加载文档",
     },
     search: {

@@ -1,4 +1,10 @@
 from .common import HarnessTarget, OkResponse, SetHarnessSupportRequest
+from .agents import (
+    OpenCodeAgentResponse,
+    OpenCodeAgentSourceResponse,
+    OpenCodeAgentsResponse,
+    OpenCodeConfigSourceResponse,
+)
 from .cli_marketplace import (
     CliMarketplaceDetailResponse,
     CliMarketplaceItemResponse,
@@ -166,6 +172,10 @@ __all__ = [
     "McpUnmanagedByServerResponse",
     "McpUnmanagedHarnessResponse",
     "OkResponse",
+    "OpenCodeAgentResponse",
+    "OpenCodeAgentSourceResponse",
+    "OpenCodeAgentsResponse",
+    "OpenCodeConfigSourceResponse",
     "OpenCodeRuntimeSkillsRefreshRequest",
     "OpenCodeRuntimeSkillsStatusResponse",
     "ReconcileMcpServerRequest",

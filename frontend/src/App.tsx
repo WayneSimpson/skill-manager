@@ -22,6 +22,7 @@ const SlashCommandsPage = lazy(() => import("./features/slash-commands/screens/S
 const SlashCommandsReviewPage = lazy(() => import("./features/slash-commands/screens/SlashCommandsReviewPage"));
 const McpNeedsReviewPage = lazy(() => import("./features/mcp/screens/McpNeedsReviewPage"));
 const McpInUsePage = lazy(() => import("./features/mcp/screens/McpInUsePage"));
+const AgentsPage = lazy(() => import("./features/agents/screens/AgentsPage"));
 
 export function App() {
   const [queryClient] = useState(
@@ -99,6 +100,15 @@ function AppContent() {
             element={
               <Suspense fallback={<RouteLoadingPanel label={common.loading.mcp} />}>
                 <McpNeedsReviewPage />
+              </Suspense>
+            }
+          />
+
+          <Route
+            path="agents"
+            element={
+              <Suspense fallback={<RouteLoadingPanel label={common.loading.agents} />}>
+                <AgentsPage />
               </Suspense>
             }
           />

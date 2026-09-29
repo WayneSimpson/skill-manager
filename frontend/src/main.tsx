@@ -24,6 +24,7 @@ import "./features/mcp/styles/pages.css";
 import "./features/mcp/styles/detail-sheet.css";
 import "./features/mcp/styles/edit-dialogs.css";
 import "./features/mcp/styles/config-form.css";
+import "./features/agents/styles/agents.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

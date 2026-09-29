@@ -10,6 +10,7 @@ from skill_manager.harness import HarnessKernelService, HarnessSupportStore
 from skill_manager.paths import AppPaths, resolve_app_paths
 
 from .cli_marketplace import CliMarketplaceCatalog
+from .agents import OpenCodeAgentQueryService
 from .invalidation import InvalidationFanout
 from .mcp.enrichment import McpEnrichmentService
 from .mcp.marketplace import McpMarketplaceCatalog
@@ -85,6 +86,7 @@ class BackendContainer:
     mcp_read_models: McpReadModelService
     mcp_queries: McpQueryService
     mcp_mutations: McpMutationService
+    opencode_agent_queries: OpenCodeAgentQueryService
     db: Database
     scan_config_service: ScanConfigService
     scan_service: ScanService
@@ -197,6 +199,7 @@ def build_backend_container(
         availability_probe=mcp_availability_probe,
         availability_cache=mcp_availability_cache,
     )
+    opencode_agent_queries = OpenCodeAgentQueryService(harness_kernel)
     mcp_mutations = McpMutationService(
         store=mcp_store,
         read_models=mcp_read_models,
@@ -243,6 +246,7 @@ def build_backend_container(
         mcp_read_models=mcp_read_models,
         mcp_queries=mcp_queries,
         mcp_mutations=mcp_mutations,
+        opencode_agent_queries=opencode_agent_queries,
         db=db,
         scan_config_service=scan_config_service,
         scan_service=scan_service,

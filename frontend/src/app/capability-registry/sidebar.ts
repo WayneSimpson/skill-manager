@@ -1,12 +1,13 @@
 import { useMemo } from "react";
 
+import { agentsRoutes, useOpenCodeAgentsQuery } from "../../features/agents/public";
 import { mcpRoutes, useMcpInventoryQuery } from "../../features/mcp/public";
 import { skillsRoutes, useSkillsCopy, useSkillsListQuery } from "../../features/skills/public";
 import { slashCommandRoutes, useSlashCommandsQuery } from "../../features/slash-commands/public";
 import { marketplaceRoutes } from "../../features/marketplace/public";
 import { useCommonCopy } from "../../i18n";
 
-export type SidebarIconKey = "overview" | "skills" | "slash-commands" | "mcp" | "marketplace";
+export type SidebarIconKey = "overview" | "skills" | "slash-commands" | "mcp" | "agents" | "marketplace";
 
 export interface SidebarLinkModel {
   key: string;
@@ -32,6 +33,7 @@ export function useSidebarModel(): SidebarModel {
   const skillsQuery = useSkillsListQuery();
   const mcpQuery = useMcpInventoryQuery();
   const slashCommandsQuery = useSlashCommandsQuery();
+  const agentsQuery = useOpenCodeAgentsQuery();
   const common = useCommonCopy();
   const skillsCopy = useSkillsCopy();
 
@@ -40,6 +42,7 @@ export function useSidebarModel(): SidebarModel {
   const slashCommandCount = slashCommandsQuery.data?.commands.length ?? null;
   const slashCommandReviewCount = slashCommandsQuery.data?.reviewCommands.length ?? null;
   const mcpCounts = mcpSidebarCounts(mcpQuery.data);
+  const agentCount = agentsQuery.data?.agents?.length ?? null;
 
   return useMemo(
     () => ({
@@ -104,6 +107,15 @@ export function useSidebarModel(): SidebarModel {
           ],
         },
         {
+          key: "agents",
+          label: common.nav.openCodeAgents,
+          iconKey: "agents",
+          count: agentCount,
+          links: [
+            { key: "agents-opencode", to: agentsRoutes.opencode, label: common.nav.openCodeAgents, count: agentCount },
+          ],
+        },
+        {
           key: "marketplace",
           label: common.nav.marketplace,
           iconKey: "marketplace",
@@ -116,6 +128,7 @@ export function useSidebarModel(): SidebarModel {
       ],
     }),
     [
+      agentCount,
       inUseSkills,
       mcpCounts.inUse,
       mcpCounts.needsReview,

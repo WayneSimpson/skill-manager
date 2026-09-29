@@ -3016,6 +3016,387 @@
         "title": "OkResponse",
         "type": "object"
       },
+      "OpenCodeAgentResponse": {
+        "properties": {
+          "additionalOptions": {
+            "additionalProperties": true,
+            "title": "Additionaloptions",
+            "type": "object"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "diagnostic": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diagnostic"
+          },
+          "disabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled"
+          },
+          "editability": {
+            "enum": [
+              "config",
+              "read-only"
+            ],
+            "title": "Editability",
+            "type": "string"
+          },
+          "hidden": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hidden"
+          },
+          "instructions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instructions"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "modelRaw": {
+            "title": "Modelraw"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "permission": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "items": {},
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Permission"
+          },
+          "permissions": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "items": {},
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Permissions"
+          },
+          "prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt"
+          },
+          "readOnly": {
+            "title": "Readonly",
+            "type": "boolean"
+          },
+          "readOnlyReasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Readonlyreasons",
+            "type": "array"
+          },
+          "schemaGeneration": {
+            "enum": [
+              "v1",
+              "v2"
+            ],
+            "title": "Schemageneration",
+            "type": "string"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OpenCodeAgentSourceResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "steps": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Steps"
+          },
+          "temperature": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature"
+          },
+          "tools": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tools"
+          },
+          "topP": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Topp"
+          },
+          "valid": {
+            "default": true,
+            "title": "Valid",
+            "type": "boolean"
+          },
+          "variant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variant"
+          }
+        },
+        "required": [
+          "name",
+          "schemaGeneration",
+          "editability",
+          "readOnly"
+        ],
+        "title": "OpenCodeAgentResponse",
+        "type": "object"
+      },
+      "OpenCodeAgentSourceResponse": {
+        "properties": {
+          "file": {
+            "title": "File",
+            "type": "string"
+          },
+          "format": {
+            "enum": [
+              "json",
+              "jsonc"
+            ],
+            "title": "Format",
+            "type": "string"
+          },
+          "isWriteTarget": {
+            "title": "Iswritetarget",
+            "type": "boolean"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file",
+          "path",
+          "format",
+          "isWriteTarget"
+        ],
+        "title": "OpenCodeAgentSourceResponse",
+        "type": "object"
+      },
+      "OpenCodeAgentsResponse": {
+        "properties": {
+          "agents": {
+            "items": {
+              "$ref": "#/components/schemas/OpenCodeAgentResponse"
+            },
+            "title": "Agents",
+            "type": "array"
+          },
+          "diagnostics": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Diagnostics",
+            "type": "array"
+          },
+          "limitation": {
+            "title": "Limitation",
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/OpenCodeConfigSourceResponse"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "writeTarget": {
+            "title": "Writetarget",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agents",
+          "writeTarget",
+          "sources",
+          "diagnostics",
+          "limitation"
+        ],
+        "title": "OpenCodeAgentsResponse",
+        "type": "object"
+      },
+      "OpenCodeConfigSourceResponse": {
+        "properties": {
+          "diagnostic": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diagnostic"
+          },
+          "format": {
+            "enum": [
+              "json",
+              "jsonc"
+            ],
+            "title": "Format",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "precedence": {
+            "title": "Precedence",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "loaded",
+              "missing",
+              "invalid",
+              "unreadable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "path",
+          "format",
+          "precedence",
+          "status"
+        ],
+        "title": "OpenCodeConfigSourceResponse",
+        "type": "object"
+      },
       "OpenCodeRuntimeSkillsRefreshRequest": {
         "additionalProperties": false,
         "properties": {
@@ -5955,6 +6336,63 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/agents/opencode": {
+      "get": {
+        "operationId": "list_opencode_agents_api_agents_opencode_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenCodeAgentsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Opencode Agents"
+      }
+    },
+    "/api/agents/opencode/{name}": {
+      "get": {
+        "operationId": "get_opencode_agent_api_agents_opencode__name__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenCodeAgentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Opencode Agent"
+      }
+    },
     "/api/health": {
       "get": {
         "operationId": "health_api_health_get",

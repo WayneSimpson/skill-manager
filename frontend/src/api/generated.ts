@@ -4,6 +4,40 @@
  */
 
 export interface paths {
+    "/api/agents/opencode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Opencode Agents */
+        get: operations["list_opencode_agents_api_agents_opencode_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agents/opencode/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Opencode Agent */
+        get: operations["get_opencode_agent_api_agents_opencode__name__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -1940,6 +1974,123 @@ export interface components {
             /** Ok */
             ok: boolean;
         };
+        /** OpenCodeAgentResponse */
+        OpenCodeAgentResponse: {
+            /** Additionaloptions */
+            additionalOptions?: {
+                [key: string]: unknown;
+            };
+            /** Color */
+            color?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Diagnostic */
+            diagnostic?: string | null;
+            /** Disabled */
+            disabled?: boolean | null;
+            /**
+             * Editability
+             * @enum {string}
+             */
+            editability: "config" | "read-only";
+            /** Hidden */
+            hidden?: boolean | null;
+            /** Instructions */
+            instructions?: string | null;
+            /** Mode */
+            mode?: string | null;
+            /** Model */
+            model?: string | null;
+            /** Modelraw */
+            modelRaw?: unknown;
+            /** Name */
+            name: string;
+            /** Permission */
+            permission?: {
+                [key: string]: unknown;
+            } | unknown[] | null;
+            /** Permissions */
+            permissions?: {
+                [key: string]: unknown;
+            } | unknown[] | null;
+            /** Prompt */
+            prompt?: string | null;
+            /** Readonly */
+            readOnly: boolean;
+            /** Readonlyreasons */
+            readOnlyReasons?: string[];
+            /**
+             * Schemageneration
+             * @enum {string}
+             */
+            schemaGeneration: "v1" | "v2";
+            source?: components["schemas"]["OpenCodeAgentSourceResponse"] | null;
+            /** Steps */
+            steps?: number | null;
+            /** Temperature */
+            temperature?: number | null;
+            /** Tools */
+            tools?: {
+                [key: string]: unknown;
+            } | null;
+            /** Topp */
+            topP?: number | null;
+            /**
+             * Valid
+             * @default true
+             */
+            valid: boolean;
+            /** Variant */
+            variant?: string | null;
+        };
+        /** OpenCodeAgentSourceResponse */
+        OpenCodeAgentSourceResponse: {
+            /** File */
+            file: string;
+            /**
+             * Format
+             * @enum {string}
+             */
+            format: "json" | "jsonc";
+            /** Iswritetarget */
+            isWriteTarget: boolean;
+            /** Path */
+            path: string;
+        };
+        /** OpenCodeAgentsResponse */
+        OpenCodeAgentsResponse: {
+            /** Agents */
+            agents: components["schemas"]["OpenCodeAgentResponse"][];
+            /** Diagnostics */
+            diagnostics: string[];
+            /** Limitation */
+            limitation: string;
+            /** Sources */
+            sources: components["schemas"]["OpenCodeConfigSourceResponse"][];
+            /** Writetarget */
+            writeTarget: string;
+        };
+        /** OpenCodeConfigSourceResponse */
+        OpenCodeConfigSourceResponse: {
+            /** Diagnostic */
+            diagnostic?: string | null;
+            /**
+             * Format
+             * @enum {string}
+             */
+            format: "json" | "jsonc";
+            /** Name */
+            name: string;
+            /** Path */
+            path: string;
+            /** Precedence */
+            precedence: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "loaded" | "missing" | "invalid" | "unreadable";
+        };
         /** OpenCodeRuntimeSkillsRefreshRequest */
         OpenCodeRuntimeSkillsRefreshRequest: {
             /**
@@ -2908,6 +3059,57 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    list_opencode_agents_api_agents_opencode_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpenCodeAgentsResponse"];
+                };
+            };
+        };
+    };
+    get_opencode_agent_api_agents_opencode__name__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpenCodeAgentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     health_api_health_get: {
         parameters: {
             query?: never;

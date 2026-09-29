@@ -5,6 +5,7 @@ import { App } from "./App";
 import { LOCALE_STORAGE_KEY } from "./i18n";
 import { createRouteFetchMock, okJson } from "./test/fetch";
 import { mcpInventoryEntry, mcpInventoryPayload } from "./test/fixtures/mcp";
+import { openCodeAgentsPayload } from "./test/fixtures/agents";
 import { skillsPayload } from "./test/fixtures/skills";
 import { renderWithRouter, stubDesktopMatchMedia } from "./test/render";
 
@@ -23,6 +24,7 @@ function stubEmptyApi() {
         { match: "/api/mcp/servers", response: mcpInventoryPayload() },
         { match: "/api/settings", response: settingsPayload() },
         { match: "/api/slash-commands", response: slashCommandsPayload() },
+        { match: "/api/agents/opencode", response: openCodeAgentsPayload() },
         {
           match: (url) =>
             url.startsWith("/api/marketplace/popular") ||

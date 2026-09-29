@@ -10,6 +10,7 @@ import {
 import * as Popover from "@radix-ui/react-popover";
 import {
   BookOpen,
+  Bot,
   Check,
   ChevronDown,
   Command,
@@ -170,6 +171,7 @@ function sidebarIcon(iconKey: SidebarIconKey): ReactNode {
   if (iconKey === "skills") return <BookOpen size={16} />;
   if (iconKey === "slash-commands") return <Command size={16} />;
   if (iconKey === "mcp") return <Terminal size={16} />;
+  if (iconKey === "agents") return <Bot size={16} />;
   if (iconKey === "marketplace") return <Store size={16} />;
   return <LayoutDashboard size={16} />;
 }
