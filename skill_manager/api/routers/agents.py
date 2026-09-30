@@ -25,6 +25,10 @@ from skill_manager.application.agents import AmbiguousOpenCodeAgentError
 
 router = APIRouter(prefix="/api/agents")
 
+# Route ordering: ALL static path segments must be declared BEFORE the dynamic
+# /opencode/{name} routes so FastAPI resolves them first. A dynamic {name}
+# route declared earlier would swallow every static sub-path as an agent name.
+
 
 @router.get("/opencode", response_model=OpenCodeAgentsResponse)
 def list_opencode_agents(container: BackendContainer = Depends(get_container)) -> dict[str, object]:
@@ -44,6 +48,41 @@ def opencode_agent_variant_options(
     container: BackendContainer = Depends(get_container),
 ) -> dict[str, object]:
     return {"options": container.opencode_agent_mutations.variant_options(model)}
+
+
+@router.get("/opencode/model-catalogue")
+def opencode_agent_model_catalogue(
+    container: BackendContainer = Depends(get_container),
+) -> dict[str, object]:
+    return container.opencode_agent_catalogue.catalogue()
+
+
+@router.get("/opencode/permission-actions")
+def opencode_agent_permission_actions(
+    container: BackendContainer = Depends(get_container),
+) -> dict[str, object]:
+    from skill_manager.opencode.agent_permissions import (
+        COMMON_ACTIONS_V1, COMMON_ACTIONS_V2,
+    )
+    return {
+        "v1": list(COMMON_ACTIONS_V1),
+        "v2": list(COMMON_ACTIONS_V2),
+        "effects": ["allow", "ask", "deny"],
+    }
+
+
+@router.get("/opencode/apply-capability", response_model=AgentApplyCapabilityResponse)
+def opencode_agent_apply_capability(
+    container: BackendContainer = Depends(get_container),
+) -> dict[str, object]:
+    return container.opencode_agent_apply.capability()
+
+
+@router.get("/opencode/apply-status", response_model=AgentApplyStatusResponse)
+def opencode_agent_apply_status(
+    container: BackendContainer = Depends(get_container),
+) -> dict[str, object]:
+    return container.opencode_agent_apply.status()
 
 
 @router.post("/opencode/preview-create", response_model=AgentPreviewResponse)
@@ -76,32 +115,6 @@ def create_opencode_agent(
         expected_hash=body.expectedSourceHash)
 
 
-@router.put("/opencode/{name}", response_model=AgentSaveResponse)
-def update_opencode_agent(
-    name: str,
-    body: AgentUpdateRequest,
-    schemaGeneration: str | None = None,
-    container: BackendContainer = Depends(get_container),
-) -> dict[str, object]:
-    return container.opencode_agent_mutations.update_agent(
-        name, schemaGeneration, body.fields.model_dump(exclude_unset=True),
-        expected_hash=body.expectedSourceHash)
-
-
-@router.get("/opencode/apply-capability", response_model=AgentApplyCapabilityResponse)
-def opencode_agent_apply_capability(
-    container: BackendContainer = Depends(get_container),
-) -> dict[str, object]:
-    return container.opencode_agent_apply.capability()
-
-
-@router.get("/opencode/apply-status", response_model=AgentApplyStatusResponse)
-def opencode_agent_apply_status(
-    container: BackendContainer = Depends(get_container),
-) -> dict[str, object]:
-    return container.opencode_agent_apply.status()
-
-
 @router.post("/opencode/apply", response_model=AgentApplyResultResponse)
 def apply_opencode_agents(
     body: AgentApplyRequest,
@@ -116,6 +129,18 @@ def acknowledge_manual_opencode_apply(
     container: BackendContainer = Depends(get_container),
 ) -> dict[str, object]:
     return container.opencode_agent_apply.acknowledge_manual(confirm=body.confirm)
+
+
+@router.put("/opencode/{name}", response_model=AgentSaveResponse)
+def update_opencode_agent(
+    name: str,
+    body: AgentUpdateRequest,
+    schemaGeneration: str | None = None,
+    container: BackendContainer = Depends(get_container),
+) -> dict[str, object]:
+    return container.opencode_agent_mutations.update_agent(
+        name, schemaGeneration, body.fields.model_dump(exclude_unset=True),
+        expected_hash=body.expectedSourceHash)
 
 
 @router.get("/opencode/{name}", response_model=OpenCodeAgentResponse)
@@ -133,24 +158,3 @@ def get_opencode_agent(
     except ValueError as error:
         status = 400 if str(error).startswith("invalid schemaGeneration") else 404
         raise HTTPException(status_code=status, detail=str(error)) from error
-
-
-@router.get("/opencode/model-catalogue")
-def opencode_agent_model_catalogue(
-    container: BackendContainer = Depends(get_container),
-) -> dict[str, object]:
-    return container.opencode_agent_catalogue.catalogue()
-
-
-@router.get("/opencode/permission-actions")
-def opencode_agent_permission_actions(
-    container: BackendContainer = Depends(get_container),
-) -> dict[str, object]:
-    from skill_manager.opencode.agent_permissions import (
-        COMMON_ACTIONS_V1, COMMON_ACTIONS_V2,
-    )
-    return {
-        "v1": list(COMMON_ACTIONS_V1),
-        "v2": list(COMMON_ACTIONS_V2),
-        "effects": ["allow", "ask", "deny"],
-    }

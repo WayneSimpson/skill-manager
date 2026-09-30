@@ -29,6 +29,9 @@ from skill_manager.opencode.jsonc_edit import insert_agent, patch_agent
 _ABSENT_HASH = "absent"
 _MAX_CATALOG_BYTES = 8 * 1024 * 1024
 _AGENT_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+
+# Single source of truth lives in opencode/agents.py (lowest layer).
+from skill_manager.opencode.agents import RESERVED_AGENT_ROUTE_NAMES  # noqa: E402
 _V1_VARIANT_KEYS = ("variant", "reasoningEffort")
 
 
@@ -323,6 +326,10 @@ class OpenCodeAgentMutationService:
                 "explicitly and cannot be overridden at creation.", 422)
         if not parsed.name or not _AGENT_NAME.fullmatch(parsed.name):
             raise MutationError("A valid agent name is required to create a sub-agent.", 422)
+        if parsed.name in RESERVED_AGENT_ROUTE_NAMES:
+            raise MutationError(
+                f"The name '{parsed.name}' is reserved for an API route and cannot "
+                "be used as an agent name.", 422)
         self._block_collision(parsed.name)
 
         target = self._write_target()
@@ -344,6 +351,10 @@ class OpenCodeAgentMutationService:
         if new_name != agent.name:
             if not _AGENT_NAME.fullmatch(new_name):
                 raise MutationError("The requested agent name is not valid.", 422)
+            if new_name in RESERVED_AGENT_ROUTE_NAMES:
+                raise MutationError(
+                    f"The name '{new_name}' is reserved for an API route and cannot "
+                    "be used as an agent name.", 422)
             self._block_collision(new_name, excluding=(name,))
         definition = self._build_definition(
             agent.schema_generation, raw_definition, parsed, is_create=False)

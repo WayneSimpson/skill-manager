@@ -78,6 +78,25 @@ generation badge, shows Instructions and Reasoning/Variant as first-class
 fields, preserved additional options, permissions, and source/editability
 state, with an explicit read-only badge.
 
+## Reserved API route names
+
+Single-segment names that match static API routes under `/api/agents/opencode/`
+are reserved and cannot be used for new agents or renames:
+
+`editor-context`, `variant-options`, `model-catalogue`, `permission-actions`,
+`apply-capability`, `apply-status`.
+
+Route matching is method-aware, so names matching POST-only routes (such as
+`apply`) are not reserved — an agent named `apply` is still addressable via
+`GET/PUT /opencode/apply` without ambiguity.
+
+Creating or renaming an agent to a reserved name returns a clear validation
+error before any configuration is touched. An externally-authored config that
+already contains a reserved-name agent remains discoverable in the listing
+without corruption; such an agent is shown read-only with a
+`reserved-api-route-name` reason because the static route takes precedence
+over the `GET /opencode/{name}` detail path.
+
 ## Safe create/edit persistence (Task 12)
 
 The editor writes only the declaring configuration file, surgically replacing

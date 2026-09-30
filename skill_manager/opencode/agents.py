@@ -6,6 +6,19 @@ from pathlib import Path
 from typing import Any, Literal
 
 from skill_manager.harness.resolution import ResolutionContext
+
+# Single-segment static GET routes under /api/agents/opencode/ that shadow the
+# dynamic GET /opencode/{name} path (route matching is method-aware, so
+# POST-only routes such as /apply do not collide). Defined here (lowest layer)
+# to avoid circular imports; application/agents.py imports from this module.
+RESERVED_AGENT_ROUTE_NAMES = frozenset({
+    "editor-context",
+    "variant-options",
+    "model-catalogue",
+    "permission-actions",
+    "apply-capability",
+    "apply-status",
+})
 from skill_manager.opencode.resolver import (
     OpenCodeConfigSource,
     STATIC_ONLY_LIMITATION,
@@ -189,8 +202,14 @@ def _build_agent(
         tools=known.get("tools"),
         additional_options=additional,
         source=source,
-        editability="config" if source is not None else "read-only",
-        read_only_reasons=() if source is not None else ("declaring-source-unresolved",),
+        editability=(
+            "read-only" if source is None or name in RESERVED_AGENT_ROUTE_NAMES
+            else "config"
+        ),
+        read_only_reasons=tuple(
+            (["declaring-source-unresolved"] if source is None else [])
+            + (["reserved-api-route-name"] if name in RESERVED_AGENT_ROUTE_NAMES else [])
+        ),
     )
 
 
