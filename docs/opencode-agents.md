@@ -108,3 +108,60 @@ Guardrails around every save:
 
 No-op saves write nothing and create no backup. Deletion is not part of this
 slice.
+
+## Apply lifecycle (Task 13)
+
+Saving and applying stay separate; saving never reloads or restarts anything.
+
+Capability detection parses the authoritative CLI command registry from
+`opencode --help` (never bare exit codes — unknown subcommands fall through to
+the default command and exit zero, which would fake availability). On the
+current OpenCode (verified live on 1.18.32) the registry contains no reload
+command, so the detected mechanism is truthfully **restart-manual**:
+configuration is loaded at startup, and no automated apply is offered. If a
+future runtime really exposes a supported reload command, detection
+automatically prefers it.
+
+Mechanisms:
+
+- `reload` — preferred when a supported reload command exists; executing it
+  requires explicit confirmation, and pending state clears only after the saved
+  configuration is verified still on disk and reported active.
+- `restart-managed` — only when a `ManagedRuntimeRegistry` controller owns a
+  process handle it created. The registry refuses handles nobody owns, so it
+  can never target arbitrary or live foreign processes. Restart requires
+  explicit confirmation plus per-handle verification against the saved config
+  hash before pending clears.
+- `restart-manual` — current default. The UI explains that changes are saved
+  but the user must restart OpenCode themselves; no fake executable action is
+  offered. An explicitly confirmed acknowledgement can clear the pending state
+  as a user assertion.
+- `unavailable` — capability unknown.
+
+Pending-apply state is durable (`opencode-agent-apply.json`, atomic write,
+mode 0600) and tracked per configuration target — including
+legacy/non-write-target declaring files edited in place. `apply-status`
+reports an aggregate pending flag plus per-target detail and the pending
+target list, so a declaring-file edit can never disappear from the Apply UI.
+The state survives UI refresh and backend restarts.
+
+Before ANY apply, restart or manual acknowledgement, the service resolves the
+complete pending set and re-hashes every pending file: nothing pending or a
+missing/externally changed file is refused (409) before any runtime action,
+with pending state untouched. The manual acknowledgement is only offered when
+the detected mechanism is `restart-manual` (refused for reload/managed), is an
+explicit user assertion rather than runtime verification, and acknowledges
+every current pending target after the same preflight checks.
+
+A reload is only safely executable when both an executor AND a runtime
+verifier are configured; pending clears only after execution succeeds AND the
+verifier confirms the saved configuration state for every pending target.
+`capability` exposes `canExecute` accordingly: 1.18.32 unmanaged is
+restart-manual with `canExecute: false`; a detected reload command without
+executor+verifier reports `reloadAvailable: true` but `canExecute: false`;
+managed restart is executable only while an owned controller handle exists.
+The UI gates its executable Apply action on `canExecute` and never offers one
+for manual restart. Failed or unverified applies never clear pending and never
+touch the saved configuration. Both the apply and acknowledgement endpoints
+enforce explicit `confirm: true` server-side; anything less is refused without
+executing.

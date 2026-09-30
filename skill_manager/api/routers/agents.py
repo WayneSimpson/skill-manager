@@ -4,6 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from skill_manager.api.deps import get_container
 from skill_manager.api.schemas.agents import (
+    AgentAcknowledgeResultResponse,
+    AgentApplyCapabilityResponse,
+    AgentApplyRequest,
+    AgentApplyResultResponse,
+    AgentApplyStatusResponse,
     AgentCreateRequest,
     AgentEditorContextResponse,
     AgentPreviewCreateRequest,
@@ -81,6 +86,36 @@ def update_opencode_agent(
     return container.opencode_agent_mutations.update_agent(
         name, schemaGeneration, body.fields.model_dump(exclude_unset=True),
         expected_hash=body.expectedSourceHash)
+
+
+@router.get("/opencode/apply-capability", response_model=AgentApplyCapabilityResponse)
+def opencode_agent_apply_capability(
+    container: BackendContainer = Depends(get_container),
+) -> dict[str, object]:
+    return container.opencode_agent_apply.capability()
+
+
+@router.get("/opencode/apply-status", response_model=AgentApplyStatusResponse)
+def opencode_agent_apply_status(
+    container: BackendContainer = Depends(get_container),
+) -> dict[str, object]:
+    return container.opencode_agent_apply.status()
+
+
+@router.post("/opencode/apply", response_model=AgentApplyResultResponse)
+def apply_opencode_agents(
+    body: AgentApplyRequest,
+    container: BackendContainer = Depends(get_container),
+) -> dict[str, object]:
+    return container.opencode_agent_apply.apply(confirm=body.confirm)
+
+
+@router.post("/opencode/apply/acknowledge-manual", response_model=AgentAcknowledgeResultResponse)
+def acknowledge_manual_opencode_apply(
+    body: AgentApplyRequest,
+    container: BackendContainer = Depends(get_container),
+) -> dict[str, object]:
+    return container.opencode_agent_apply.acknowledge_manual(confirm=body.confirm)
 
 
 @router.get("/opencode/{name}", response_model=OpenCodeAgentResponse)

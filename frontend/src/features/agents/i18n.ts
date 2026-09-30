@@ -54,6 +54,7 @@ const englishAgentsCopy = {
   yes: "Yes",
   no: "No",
   newSubagent: "New sub-agent",
+  applyAction: "Apply changes…",
   edit: "Edit",
   savedPendingApply: "Saved — pending apply in OpenCode",
   requiresGenerationChoice: "Both V1 and V2 agent syntax exist; choose a syntax for the new agent.",
@@ -100,6 +101,31 @@ const englishAgentsCopy = {
   errors: {
     preview: "The preview could not be built.",
     save: "Saving failed.",
+  },
+  apply: {
+    title: "Apply agent changes",
+    description: "Apply saved agent configuration to the OpenCode runtime.",
+    close: "Close",
+    applying: "Applying",
+    confirmApply: "Apply now",
+    acknowledgeRestarted: "I have restarted OpenCode",
+    manualAcknowledge: "I have restarted OpenCode myself and want to clear the pending state.",
+    mechanisms: {
+      reload: "Mechanism: configuration reload (preferred)",
+      managed: "Mechanism: restart of a Skill Manager-owned runtime",
+      manual: "Mechanism: manual restart required",
+      unavailable: "Mechanism: unknown",
+    },
+    detectedNotConfigured:
+      "A reload capability is detected but Skill Manager is not configured to execute it safely. Apply is unavailable; restart OpenCode manually if needed.",
+    warnings: {
+      reload: "Active OpenCode sessions may observe changed agent configuration. Confirm to reload now.",
+      managed: "Active OpenCode sessions on the managed runtime will be interrupted. Confirm to restart it now.",
+      manual: "Your changes are saved, but this OpenCode version has no supported reload mechanism and Skill Manager does not own this runtime. Restart OpenCode yourself; changes take effect on the next start.",
+    },
+    errors: {
+      apply: "Applying failed.",
+    },
   },
 } as const;
 
@@ -160,6 +186,7 @@ export const agentsCopy: LocalizedCopy<typeof englishAgentsCopy> = {
     yes: "是",
     no: "否",
     newSubagent: "新建 sub-agent",
+    applyAction: "应用变更…",
     edit: "编辑",
     savedPendingApply: "已保存 — 等待在 OpenCode 中生效",
     requiresGenerationChoice: "同时存在 V1 与 V2 agent 语法；请为新 agent 选择一种语法。",
@@ -206,6 +233,31 @@ export const agentsCopy: LocalizedCopy<typeof englishAgentsCopy> = {
     errors: {
       preview: "无法生成预览。",
       save: "保存失败。",
+    },
+    apply: {
+      title: "应用 agent 变更",
+      description: "将已保存的 agent 配置应用到 OpenCode 运行时。",
+      close: "关闭",
+      applying: "应用中",
+      confirmApply: "立即应用",
+      acknowledgeRestarted: "我已重启 OpenCode",
+      manualAcknowledge: "我已自行重启 OpenCode，并希望清除待应用状态。",
+      mechanisms: {
+        reload: "机制：配置重载（优先）",
+        managed: "机制：重启 Skill Manager 托管的运行时",
+        manual: "机制：需要手动重启",
+        unavailable: "机制：未知",
+      },
+      detectedNotConfigured:
+      "检测到重载能力，但 Skill Manager 尚未配置为可安全执行。应用不可用；如需要请手动重启 OpenCode。",
+    warnings: {
+        reload: "活动中的 OpenCode 会话可能会观察到 agent 配置变化。确认后立即重载。",
+        managed: "托管运行时上的活动 OpenCode 会话将被中断。确认后立即重启。",
+        manual: "变更已保存，但当前 OpenCode 版本不支持重载，且该运行时并非 Skill Manager 托管。请自行重启 OpenCode；变更将在下次启动时生效。",
+      },
+      errors: {
+        apply: "应用失败。",
+      },
     },
   },
 };

@@ -76,3 +76,27 @@ export async function updateAgent(
     { fields, expectedSourceHash },
   );
 }
+import type {
+  AgentAcknowledgeResultDto,
+  AgentApplyCapabilityDto,
+  AgentApplyResultDto,
+  AgentApplyStatusDto,
+} from "./types";
+
+export async function fetchAgentApplyCapability(): Promise<AgentApplyCapabilityDto> {
+  return fetchJson<AgentApplyCapabilityDto>("/agents/opencode/apply-capability");
+}
+
+export async function fetchAgentApplyStatus(): Promise<AgentApplyStatusDto> {
+  return fetchJson<AgentApplyStatusDto>("/agents/opencode/apply-status");
+}
+
+export async function applyAgentConfig(confirm: boolean): Promise<AgentApplyResultDto> {
+  return postJson<AgentApplyResultDto>("/agents/opencode/apply", { confirm });
+}
+
+export async function acknowledgeManualApply(confirm: boolean): Promise<AgentAcknowledgeResultDto> {
+  return postJson<AgentAcknowledgeResultDto>("/agents/opencode/apply/acknowledge-manual", {
+    confirm,
+  });
+}

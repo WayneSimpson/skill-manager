@@ -10,7 +10,38 @@ from skill_manager.harness import HarnessKernelService, HarnessSupportStore
 from skill_manager.paths import AppPaths, resolve_app_paths
 
 from .cli_marketplace import CliMarketplaceCatalog
-from .agents import OpenCodeAgentMutationService, OpenCodeAgentQueryService
+from skill_manager.opencode.apply_lifecycle import (
+    AgentApplyStateStore,
+    ManagedRuntimeRegistry,
+    OpenCodeCapabilityDetector,
+    parse_cli_commands,
+)
+
+
+def build_opencode_capability_detector(env: dict[str, str]):
+    """Detector from explicit runtime configuration; defaults to no probe."""
+    executable = env.get("SKILL_MANAGER_NATIVE_OPENCODE_EXECUTABLE")
+    if not executable:
+        return OpenCodeCapabilityDetector(command_registry=None)
+
+    cache: dict[str, frozenset[str]] = {}
+
+    def registry() -> frozenset[str]:
+        if "commands" not in cache:
+            import subprocess
+
+            try:
+                result = subprocess.run(
+                    [executable, "--help"], capture_output=True, text=True, timeout=30,
+                    env={"HOME": "/nonexistent", "PATH": "/usr/bin:/bin"},
+                )
+                cache["commands"] = parse_cli_commands(result.stdout + result.stderr)
+            except (OSError, ValueError, subprocess.SubprocessError):
+                cache["commands"] = frozenset()
+        return cache["commands"]
+
+    return OpenCodeCapabilityDetector(command_registry=registry)
+from .agents import OpenCodeAgentApplyService, OpenCodeAgentMutationService, OpenCodeAgentQueryService
 from .invalidation import InvalidationFanout
 from .mcp.enrichment import McpEnrichmentService
 from .mcp.marketplace import McpMarketplaceCatalog
@@ -88,6 +119,7 @@ class BackendContainer:
     mcp_mutations: McpMutationService
     opencode_agent_queries: OpenCodeAgentQueryService
     opencode_agent_mutations: OpenCodeAgentMutationService
+    opencode_agent_apply: OpenCodeAgentApplyService
     db: Database
     scan_config_service: ScanConfigService
     scan_service: ScanService
@@ -201,8 +233,15 @@ def build_backend_container(
         availability_cache=mcp_availability_cache,
     )
     opencode_agent_queries = OpenCodeAgentQueryService(harness_kernel)
+    agent_apply_store = AgentApplyStateStore(paths.state_dir / "opencode-agent-apply.json")
     opencode_agent_mutations = OpenCodeAgentMutationService(
-        harness_kernel, paths.state_dir / "opencode-agent-backups"
+        harness_kernel, paths.state_dir / "opencode-agent-backups",
+        apply_store=agent_apply_store,
+    )
+    opencode_agent_apply = OpenCodeAgentApplyService(
+        harness_kernel,
+        agent_apply_store,
+        build_opencode_capability_detector(active_env),
     )
     mcp_mutations = McpMutationService(
         store=mcp_store,
@@ -252,6 +291,7 @@ def build_backend_container(
         mcp_mutations=mcp_mutations,
         opencode_agent_queries=opencode_agent_queries,
         opencode_agent_mutations=opencode_agent_mutations,
+        opencode_agent_apply=opencode_agent_apply,
         db=db,
         scan_config_service=scan_config_service,
         scan_service=scan_service,

@@ -100,3 +100,43 @@ export interface AgentSaveResultDto {
   pendingApply: boolean;
   backup: AgentBackupDto | null;
 }
+
+export type ApplyMechanismDto = "reload" | "restart-managed" | "restart-manual" | "unavailable";
+
+export interface AgentApplyCapabilityDto {
+  mechanism: ApplyMechanismDto;
+  reloadAvailable: boolean;
+  managedRuntime: boolean;
+  canExecute: boolean;
+  detail: string;
+  confirmRequired: boolean;
+}
+
+export interface AgentApplyTargetStatusDto {
+  target: string;
+  pending: boolean;
+  savedHash: string | null;
+  appliedHash: string | null;
+}
+
+export interface AgentApplyStatusDto {
+  target: string;
+  pending: boolean;
+  savedHash: string | null;
+  appliedHash: string | null;
+  targets: AgentApplyTargetStatusDto[];
+  pendingTargets: string[];
+}
+
+export interface AgentApplyResultDto {
+  applied: boolean;
+  mechanism: "reload" | "restart-managed";
+  pending: boolean;
+  target: string;
+}
+
+export interface AgentAcknowledgeResultDto {
+  acknowledged: boolean;
+  pending: boolean;
+  target: string;
+}

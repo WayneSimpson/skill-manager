@@ -22,6 +22,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/agents/opencode/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply Opencode Agents */
+        post: operations["apply_opencode_agents_api_agents_opencode_apply_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agents/opencode/apply-capability": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Opencode Agent Apply Capability */
+        get: operations["opencode_agent_apply_capability_api_agents_opencode_apply_capability_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agents/opencode/apply-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Opencode Agent Apply Status */
+        get: operations["opencode_agent_apply_status_api_agents_opencode_apply_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agents/opencode/apply/acknowledge-manual": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Acknowledge Manual Opencode Apply */
+        post: operations["acknowledge_manual_opencode_apply_api_agents_opencode_apply_acknowledge_manual_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/agents/opencode/editor-context": {
         parameters: {
             query?: never;
@@ -1118,6 +1186,82 @@ export interface components {
             name: string;
             /** Observed harness */
             observedHarness?: string | null;
+        };
+        /** AgentAcknowledgeResultResponse */
+        AgentAcknowledgeResultResponse: {
+            /** Acknowledged */
+            acknowledged: boolean;
+            /** Acknowledgedtargets */
+            acknowledgedTargets?: string[];
+            /** Pending */
+            pending: boolean;
+            /** Target */
+            target: string;
+        };
+        /** AgentApplyCapabilityResponse */
+        AgentApplyCapabilityResponse: {
+            /** Canexecute */
+            canExecute: boolean;
+            /** Confirmrequired */
+            confirmRequired: boolean;
+            /** Detail */
+            detail: string;
+            /** Managedruntime */
+            managedRuntime: boolean;
+            /**
+             * Mechanism
+             * @enum {string}
+             */
+            mechanism: "reload" | "restart-managed" | "restart-manual" | "unavailable";
+            /** Reloadavailable */
+            reloadAvailable: boolean;
+        };
+        /** AgentApplyRequest */
+        AgentApplyRequest: {
+            /** Confirm */
+            confirm: boolean;
+        };
+        /** AgentApplyResultResponse */
+        AgentApplyResultResponse: {
+            /** Applied */
+            applied: boolean;
+            /** Appliedtargets */
+            appliedTargets?: string[];
+            /**
+             * Mechanism
+             * @enum {string}
+             */
+            mechanism: "reload" | "restart-managed";
+            /** Pending */
+            pending: boolean;
+            /** Target */
+            target: string;
+        };
+        /** AgentApplyStatusResponse */
+        AgentApplyStatusResponse: {
+            /** Appliedhash */
+            appliedHash: string | null;
+            /** Pending */
+            pending: boolean;
+            /** Pendingtargets */
+            pendingTargets: string[];
+            /** Savedhash */
+            savedHash: string | null;
+            /** Target */
+            target: string;
+            /** Targets */
+            targets: components["schemas"]["AgentApplyTargetStatusResponse"][];
+        };
+        /** AgentApplyTargetStatusResponse */
+        AgentApplyTargetStatusResponse: {
+            /** Appliedhash */
+            appliedHash: string | null;
+            /** Pending */
+            pending: boolean;
+            /** Savedhash */
+            savedHash: string | null;
+            /** Target */
+            target: string;
         };
         /** AgentBackupResponse */
         AgentBackupResponse: {
@@ -3279,6 +3423,112 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AgentSaveResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    apply_opencode_agents_api_agents_opencode_apply_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentApplyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentApplyResultResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    opencode_agent_apply_capability_api_agents_opencode_apply_capability_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentApplyCapabilityResponse"];
+                };
+            };
+        };
+    };
+    opencode_agent_apply_status_api_agents_opencode_apply_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentApplyStatusResponse"];
+                };
+            };
+        };
+    };
+    acknowledge_manual_opencode_apply_api_agents_opencode_apply_acknowledge_manual_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentApplyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentAcknowledgeResultResponse"];
                 };
             };
             /** @description Validation Error */

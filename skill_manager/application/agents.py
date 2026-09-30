@@ -22,6 +22,7 @@ from skill_manager.opencode.agents import (
     _split_v2_model,
     discover_config_agents,
 )
+from skill_manager.opencode.apply_lifecycle import AgentApplyStateError, AgentApplyStateStore
 from skill_manager.opencode.jsonc_edit import insert_agent, patch_agent
 
 _ABSENT_HASH = "absent"
@@ -171,9 +172,11 @@ class OpenCodeAgentMutationService:
 
     last_failure_detail: str | None = None
 
-    def __init__(self, kernel: HarnessKernelService, backup_root: Path):
+    def __init__(self, kernel: HarnessKernelService, backup_root: Path,
+                 apply_store: "AgentApplyStateStore | None" = None):
         self._kernel = kernel
         self._backup_root = backup_root
+        self._apply_store = apply_store
 
     # ---- context / metadata -------------------------------------------------
 
@@ -500,6 +503,34 @@ class OpenCodeAgentMutationService:
                 "The saved configuration could not be verified and automatic restore "
                 "also failed." + backup_note, 500)
 
+        if changed and self._apply_store is not None:
+            # Durable pending-state recording is part of the save transaction:
+            # a failure here rolls the configuration back so the user never
+            # sees a failed save with a changed config.
+            try:
+                self._apply_store.mark_saved(
+                    str(target), hashlib.sha256(candidate.encode("utf-8")).hexdigest()
+                )
+            except Exception as error:  # noqa: BLE001 - state persistence boundary
+                restored = self._restore_original(target, raw)
+                if restored:
+                    self.last_failure_detail = f"pending-state persistence failed: {error}"
+                    raise MutationError(
+                        "Recording the saved-but-pending state failed, so the "
+                        "configuration change was rolled back automatically. Nothing "
+                        "was saved.", 500) from error
+                backup_note = (
+                    f" A recoverable backup is available at {backup_payload['path']}."
+                    if backup_payload else ""
+                )
+                self.last_failure_detail = (
+                    "pending-state persistence failed; config restore failed" + backup_note
+                )
+                raise MutationError(
+                    "Recording the saved-but-pending state failed and automatic "
+                    "configuration rollback also failed. The saved configuration may "
+                    "be present without pending-state tracking." + backup_note, 500,
+                ) from error
         return {
             "changed": changed,
             "pendingApply": changed,  # Saved config is never applied by this service.
@@ -557,3 +588,191 @@ class OpenCodeAgentMutationService:
             return target.read_text(encoding="utf-8") == raw
         except (OSError, UnicodeError):
             return False
+
+
+class OpenCodeAgentApplyService:
+    """Explicit apply lifecycle; never reloads or restarts without confirmation."""
+
+    def __init__(
+        self,
+        kernel: HarnessKernelService,
+        store: AgentApplyStateStore,
+        detector,
+        *,
+        managed_registry=None,
+        reload_executor=None,
+        reload_verifier=None,
+    ):
+        self._kernel = kernel
+        self._store = store
+        self._detector = detector
+        self._managed_registry = managed_registry
+        self._reload_executor = reload_executor
+        self._reload_verifier = reload_verifier
+
+    def capability(self) -> dict[str, object]:
+        capability = self._detector.detect()
+        if capability.mechanism == "reload":
+            # A detected reload command is only safely executable when both an
+            # executor and a runtime verifier are configured.
+            can_execute = self._reload_executor is not None and self._reload_verifier is not None
+        elif capability.mechanism == "restart-managed":
+            can_execute = self._managed_registry is not None and bool(self._managed_registry.handles())
+        else:
+            can_execute = False  # Manual/unavailable is never automatically executable.
+        detail = capability.detail
+        if capability.mechanism == "reload" and not can_execute:
+            detail += (" A reload command is detected but no safe reload executor and "
+                       "runtime verifier are configured, so automated apply is unavailable.")
+        return {
+            "mechanism": capability.mechanism,
+            "reloadAvailable": capability.reload_available,
+            "managedRuntime": capability.managed_runtime,
+            "canExecute": can_execute,
+            "detail": detail,
+            "confirmRequired": True,
+        }
+
+    def status(self) -> dict[str, object]:
+        self._guard_state_store()
+        # Aggregate across every tracked target so declaring-file edits
+        # (including legacy/non-write-target sources) are never hidden.
+        targets = self._store.all_targets()
+        pending_targets = {
+            target: status for target, status in targets.items() if status["pending"]
+        }
+        write_target = str(self._write_target())
+        write_status = targets.get(write_target, {"pending": False, "savedHash": None,
+                                                  "appliedHash": None})
+        return {
+            "target": write_target,
+            "pending": bool(pending_targets),
+            "savedHash": write_status["savedHash"],
+            "appliedHash": write_status["appliedHash"],
+            "targets": [
+                {"target": target, **status} for target, status in sorted(targets.items())
+            ],
+            "pendingTargets": sorted(pending_targets),
+        }
+
+    def apply(self, *, confirm: bool) -> dict[str, object]:
+        if confirm is not True:
+            raise MutationError(
+                "Applying requires explicit confirmation; the request was refused "
+                "without executing anything.", 422)
+        self._guard_state_store()
+        pending = self._resolve_pending_for_execution()
+        capability = self._detector.detect()
+        if capability.mechanism == "reload":
+            return self._apply_reload(pending)
+        if capability.mechanism == "restart-managed":
+            return self._apply_managed_restart(pending)
+        raise MutationError(
+            "Manual restart required: this OpenCode runtime has no supported reload "
+            "mechanism and no Skill Manager-owned runtime can be restarted safely. "
+            "Saved changes remain pending until OpenCode is restarted.", 409)
+
+    def acknowledge_manual(self, *, confirm: bool) -> dict[str, object]:
+        """Records the user's explicit statement that they restarted OpenCode."""
+        if confirm is not True:
+            raise MutationError("Acknowledgement requires explicit confirmation.", 422)
+        self._guard_state_store()
+        capability = self._detector.detect()
+        if capability.mechanism != "restart-manual":
+            raise MutationError(
+                "Manual acknowledgement is only available when a manual restart is "
+                "the required mechanism; the current mechanism is "
+                f"{capability.mechanism}.", 409)
+        pending = self._resolve_pending_for_execution()
+        for target, saved_hash in pending.items():
+            self._store.mark_applied(target, saved_hash)
+        return {
+            "acknowledged": True,
+            "pending": False,
+            "target": str(self._write_target()),
+            "acknowledgedTargets": sorted(pending),
+        }
+
+    # ---- internals -------------------------------------------------------------
+
+    def _guard_state_store(self) -> None:
+        """A corrupt/unreadable apply-state must never look like 'nothing pending'."""
+        try:
+            self._store.all_targets()
+        except AgentApplyStateError as error:
+            raise MutationError(str(error), 503) from error
+
+    def _write_target(self) -> Path:
+        from skill_manager.opencode.resolver import opencode_write_config_path
+
+        return opencode_write_config_path(self._kernel.context)
+
+    def _resolve_pending_for_execution(self) -> dict[str, str]:
+        """Pending set plus preflight: files must still match their saved hashes."""
+        pending = self._store.pending_targets()
+        if not pending:
+            raise MutationError(
+                "There is no saved change pending application; nothing was executed.",
+                409,
+            )
+        for target, saved_hash in pending.items():
+            try:
+                current = hashlib.sha256(Path(target).read_bytes()).hexdigest()
+            except OSError:
+                raise MutationError(
+                    f"A pending configuration file could not be read before applying "
+                    "({Path(target).name}); nothing was executed and the pending state "
+                    "is unchanged.", 409) from None
+            if current != saved_hash:
+                raise MutationError(
+                    "A pending configuration file changed after it was saved "
+                    f"({Path(target).name}); re-open and re-save it before applying. "
+                    "Nothing was executed and the pending state is unchanged.", 409)
+        return pending
+
+    def _apply_reload(self, pending: dict[str, str]) -> dict[str, object]:
+        if self._reload_executor is None or self._reload_verifier is None:
+            raise MutationError(
+                "A reload mechanism was detected but no reload executor and runtime "
+                "verifier are configured; nothing was executed.", 409)
+        if not self._reload_executor("reload"):
+            raise MutationError(
+                "The runtime reload command failed; the saved configuration is intact "
+                "and remains pending.", 502)
+        # Runtime verification: the reload only counts when the verifier confirms
+        # the saved configuration state for EVERY pending target.
+        for target, saved_hash in pending.items():
+            if not self._reload_verifier(target, saved_hash):
+                raise MutationError(
+                    "The reload executed but the runtime could not be verified as "
+                    "using the saved configuration; pending state was not cleared.",
+                    502)
+        for target, saved_hash in pending.items():
+            self._store.mark_applied(target, saved_hash)
+        return {"applied": True, "mechanism": "reload", "pending": False,
+                "target": str(self._write_target()),
+                "appliedTargets": sorted(pending)}
+
+    def _apply_managed_restart(self, pending: dict[str, str]) -> dict[str, object]:
+        if self._managed_registry is None or not self._managed_registry.handles():
+            raise MutationError(
+                "No Skill Manager-owned runtime handle is available to restart.", 409)
+        handles = self._managed_registry.handles()
+        for handle in handles:
+            if not self._managed_registry.restart(handle):
+                raise MutationError(
+                    "Restarting the managed OpenCode runtime failed; the saved "
+                    "configuration is intact and remains pending.", 502)
+        for target, saved_hash in pending.items():
+            if not all(
+                self._managed_registry.verify_active(handle, saved_hash)
+                for handle in handles
+            ):
+                raise MutationError(
+                    "The restarted runtime could not be verified as running the saved "
+                    "configuration; pending state was not cleared.", 502)
+        for target, saved_hash in pending.items():
+            self._store.mark_applied(target, saved_hash)
+        return {"applied": True, "mechanism": "restart-managed", "pending": False,
+                "target": str(self._write_target()),
+                "appliedTargets": sorted(pending)}

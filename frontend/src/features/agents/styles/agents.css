@@ -351,3 +351,58 @@
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
 }
+
+/* Task 13: apply lifecycle UI. */
+.agents-header-actions {
+  display: flex;
+  gap: var(--space-2, 8px);
+}
+
+.agent-apply__description {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.agent-apply__mechanism {
+  font-weight: 600;
+  margin: var(--space-2, 8px) 0;
+}
+
+.agent-apply__warning {
+  border-left: 3px solid var(--warning, #e6a700);
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  background: var(--surface-sunken, #101010);
+  border-radius: var(--radius-sm, 6px);
+  font-size: 0.88rem;
+}
+
+.agent-apply__warning--strong {
+  border-left-color: var(--danger, #f55);
+}
+
+.agent-apply__manual {
+  font-size: 0.9rem;
+  color: var(--text-muted, #9a9a9a);
+}
+
+.agent-apply__acknowledge {
+  display: flex;
+  gap: var(--space-2, 8px);
+  align-items: flex-start;
+  margin: var(--space-2, 8px) 0;
+  font-size: 0.85rem;
+}
+
+.agent-apply__detail {
+  font-size: 0.78rem;
+  color: var(--text-muted, #9a9a9a);
+}
+
+.agent-apply__error {
+  color: var(--danger, #f55);
+  font-size: 0.85rem;
+}

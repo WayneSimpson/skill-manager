@@ -1,5 +1,10 @@
 from .common import HarnessTarget, OkResponse, SetHarnessSupportRequest
 from .agents import (
+    AgentAcknowledgeResultResponse,
+    AgentApplyCapabilityResponse,
+    AgentApplyRequest,
+    AgentApplyResultResponse,
+    AgentApplyStatusResponse,
     AgentBackupResponse,
     AgentPreviewCreateRequest,
     AgentPreviewUpdateRequest,
@@ -181,6 +186,11 @@ __all__ = [
     "McpStatusResponse",
     "McpUnmanagedByServerResponse",
     "McpUnmanagedHarnessResponse",
+    "AgentAcknowledgeResultResponse",
+    "AgentApplyCapabilityResponse",
+    "AgentApplyRequest",
+    "AgentApplyResultResponse",
+    "AgentApplyStatusResponse",
     "AgentBackupResponse",
     "AgentCreateRequest",
     "AgentEditorContextResponse",

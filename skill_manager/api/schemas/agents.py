@@ -147,3 +147,47 @@ __all__ = [
     "AgentEditorContextResponse",
     "AgentVariantOptionsResponse",
 ]
+
+
+class AgentApplyCapabilityResponse(BaseModel):
+    mechanism: Literal["reload", "restart-managed", "restart-manual", "unavailable"]
+    reloadAvailable: bool
+    managedRuntime: bool
+    canExecute: bool
+    detail: str
+    confirmRequired: bool
+
+
+class AgentApplyTargetStatusResponse(BaseModel):
+    target: str
+    pending: bool
+    savedHash: str | None
+    appliedHash: str | None
+
+
+class AgentApplyStatusResponse(BaseModel):
+    target: str
+    pending: bool
+    savedHash: str | None
+    appliedHash: str | None
+    targets: list[AgentApplyTargetStatusResponse]
+    pendingTargets: list[str]
+
+
+class AgentApplyRequest(BaseModel):
+    confirm: bool
+
+
+class AgentApplyResultResponse(BaseModel):
+    applied: bool
+    mechanism: Literal["reload", "restart-managed"]
+    pending: bool
+    target: str
+    appliedTargets: list[str] = Field(default_factory=list)
+
+
+class AgentAcknowledgeResultResponse(BaseModel):
+    acknowledged: bool
+    pending: bool
+    target: str
+    acknowledgedTargets: list[str] = Field(default_factory=list)

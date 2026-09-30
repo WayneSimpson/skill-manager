@@ -6,7 +6,13 @@ import { LoadingSpinner } from "../../../components/LoadingSpinner";
 import { PageHeader } from "../../../components/PageHeader";
 import { AgentEditorDialog } from "../components/AgentEditorDialog";
 import { useAgentsCopy } from "../i18n";
-import { useOpenCodeAgentsQuery, useAgentEditorContextQuery } from "../api/queries";
+import {
+  useOpenCodeAgentsQuery,
+  useAgentEditorContextQuery,
+  useAgentApplyCapabilityQuery,
+  useAgentApplyStatusQuery,
+} from "../api/queries";
+import { ApplyDialog } from "../components/ApplyDialog";
 import type { OpenCodeAgentDto } from "../api/types";
 
 type EditorTarget =
@@ -20,12 +26,15 @@ type CreateChoice =
 export default function AgentsPage() {
   const query = useOpenCodeAgentsQuery();
   const contextQuery = useAgentEditorContextQuery();
+  const applyCapabilityQuery = useAgentApplyCapabilityQuery();
+  const applyStatusQuery = useAgentApplyStatusQuery();
   const copy = useAgentsCopy();
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   const [editor, setEditor] = useState<EditorTarget | null>(null);
   const [createChoice, setCreateChoice] = useState<CreateChoice | null>(null);
-  const [savedPending, setSavedPending] = useState<string | null>(null);
+  const [applyOpen, setApplyOpen] = useState(false);
+  const pendingApply = applyStatusQuery.data?.pending ?? false;
 
   const agents = query.data?.agents ?? [];
   const filtered = useMemo(() => {
@@ -53,6 +62,7 @@ export default function AgentsPage() {
           title={copy.title}
           subtitle={copy.subtitle}
           actions={
+            <div className="page-header__actions agents-header-actions">
             <button
               type="button"
               className="action-pill action-pill--md action-pill--accent"
@@ -70,6 +80,16 @@ export default function AgentsPage() {
             >
               {copy.newSubagent}
             </button>
+            {pendingApply ? (
+              <button
+                type="button"
+                className="action-pill action-pill--md"
+                onClick={() => setApplyOpen(true)}
+              >
+                {copy.applyAction}
+              </button>
+            ) : null}
+            </div>
           }
         />
         {agents.length > 0 ? (
@@ -151,11 +171,19 @@ export default function AgentsPage() {
                   generation: ambiguous ? agent.schemaGeneration : null,
                 });
               }}
-              savedPendingApply={savedPending}
+              savedPendingApply={pendingApply}
             />
           ) : null}
         </div>
       )}
+
+      {applyOpen ? (
+        <ApplyDialog
+          open={applyOpen}
+          capability={applyCapabilityQuery.data}
+          onOpenChange={setApplyOpen}
+        />
+      ) : null}
 
       {createChoice ? (
         <GenerationChoiceDialog
@@ -176,8 +204,8 @@ export default function AgentsPage() {
               setEditor(null);
             }
           }}
-          onSaved={({ changed }) => {
-            setSavedPending(changed ? new Date().toISOString() : null);
+          onSaved={() => {
+            void applyStatusQuery.refetch();
           }}
         />
       ) : null}
@@ -202,7 +230,7 @@ function AgentDetail({
   agent: OpenCodeAgentDto;
   onClose: () => void;
   onEdit: (agent: OpenCodeAgentDto) => void;
-  savedPendingApply: string | null;
+  savedPendingApply: boolean;
 }) {
   const copy = useAgentsCopy();
   const additionalEntries = Object.entries(agent.additionalOptions ?? {});

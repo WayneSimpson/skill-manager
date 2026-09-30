@@ -56,6 +56,232 @@
         "title": "AdoptMcpRequest",
         "type": "object"
       },
+      "AgentAcknowledgeResultResponse": {
+        "properties": {
+          "acknowledged": {
+            "title": "Acknowledged",
+            "type": "boolean"
+          },
+          "acknowledgedTargets": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Acknowledgedtargets",
+            "type": "array"
+          },
+          "pending": {
+            "title": "Pending",
+            "type": "boolean"
+          },
+          "target": {
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "acknowledged",
+          "pending",
+          "target"
+        ],
+        "title": "AgentAcknowledgeResultResponse",
+        "type": "object"
+      },
+      "AgentApplyCapabilityResponse": {
+        "properties": {
+          "canExecute": {
+            "title": "Canexecute",
+            "type": "boolean"
+          },
+          "confirmRequired": {
+            "title": "Confirmrequired",
+            "type": "boolean"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "managedRuntime": {
+            "title": "Managedruntime",
+            "type": "boolean"
+          },
+          "mechanism": {
+            "enum": [
+              "reload",
+              "restart-managed",
+              "restart-manual",
+              "unavailable"
+            ],
+            "title": "Mechanism",
+            "type": "string"
+          },
+          "reloadAvailable": {
+            "title": "Reloadavailable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "mechanism",
+          "reloadAvailable",
+          "managedRuntime",
+          "canExecute",
+          "detail",
+          "confirmRequired"
+        ],
+        "title": "AgentApplyCapabilityResponse",
+        "type": "object"
+      },
+      "AgentApplyRequest": {
+        "properties": {
+          "confirm": {
+            "title": "Confirm",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "confirm"
+        ],
+        "title": "AgentApplyRequest",
+        "type": "object"
+      },
+      "AgentApplyResultResponse": {
+        "properties": {
+          "applied": {
+            "title": "Applied",
+            "type": "boolean"
+          },
+          "appliedTargets": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Appliedtargets",
+            "type": "array"
+          },
+          "mechanism": {
+            "enum": [
+              "reload",
+              "restart-managed"
+            ],
+            "title": "Mechanism",
+            "type": "string"
+          },
+          "pending": {
+            "title": "Pending",
+            "type": "boolean"
+          },
+          "target": {
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "applied",
+          "mechanism",
+          "pending",
+          "target"
+        ],
+        "title": "AgentApplyResultResponse",
+        "type": "object"
+      },
+      "AgentApplyStatusResponse": {
+        "properties": {
+          "appliedHash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Appliedhash"
+          },
+          "pending": {
+            "title": "Pending",
+            "type": "boolean"
+          },
+          "pendingTargets": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Pendingtargets",
+            "type": "array"
+          },
+          "savedHash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Savedhash"
+          },
+          "target": {
+            "title": "Target",
+            "type": "string"
+          },
+          "targets": {
+            "items": {
+              "$ref": "#/components/schemas/AgentApplyTargetStatusResponse"
+            },
+            "title": "Targets",
+            "type": "array"
+          }
+        },
+        "required": [
+          "target",
+          "pending",
+          "savedHash",
+          "appliedHash",
+          "targets",
+          "pendingTargets"
+        ],
+        "title": "AgentApplyStatusResponse",
+        "type": "object"
+      },
+      "AgentApplyTargetStatusResponse": {
+        "properties": {
+          "appliedHash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Appliedhash"
+          },
+          "pending": {
+            "title": "Pending",
+            "type": "boolean"
+          },
+          "savedHash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Savedhash"
+          },
+          "target": {
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target",
+          "pending",
+          "savedHash",
+          "appliedHash"
+        ],
+        "title": "AgentApplyTargetStatusResponse",
+        "type": "object"
+      },
       "AgentBackupResponse": {
         "properties": {
           "file": {
@@ -6715,6 +6941,118 @@
           }
         },
         "summary": "Create Opencode Agent"
+      }
+    },
+    "/api/agents/opencode/apply": {
+      "post": {
+        "operationId": "apply_opencode_agents_api_agents_opencode_apply_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentApplyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentApplyResultResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Apply Opencode Agents"
+      }
+    },
+    "/api/agents/opencode/apply-capability": {
+      "get": {
+        "operationId": "opencode_agent_apply_capability_api_agents_opencode_apply_capability_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentApplyCapabilityResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Opencode Agent Apply Capability"
+      }
+    },
+    "/api/agents/opencode/apply-status": {
+      "get": {
+        "operationId": "opencode_agent_apply_status_api_agents_opencode_apply_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentApplyStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Opencode Agent Apply Status"
+      }
+    },
+    "/api/agents/opencode/apply/acknowledge-manual": {
+      "post": {
+        "operationId": "acknowledge_manual_opencode_apply_api_agents_opencode_apply_acknowledge_manual_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentApplyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentAcknowledgeResultResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Acknowledge Manual Opencode Apply"
       }
     },
     "/api/agents/opencode/editor-context": {

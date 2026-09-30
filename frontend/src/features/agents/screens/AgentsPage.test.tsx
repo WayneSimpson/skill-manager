@@ -13,10 +13,17 @@ vi.mock("../api/queries", async (importOriginal) => {
     ...actual,
     useOpenCodeAgentsQuery: vi.fn(),
     useAgentEditorContextQuery: vi.fn(),
+    useAgentApplyCapabilityQuery: vi.fn(),
+    useAgentApplyStatusQuery: vi.fn(),
   };
 });
 
-import { useAgentEditorContextQuery, useOpenCodeAgentsQuery } from "../api/queries";
+import {
+  useAgentApplyCapabilityQuery,
+  useAgentApplyStatusQuery,
+  useAgentEditorContextQuery,
+  useOpenCodeAgentsQuery,
+} from "../api/queries";
 
 const fixture: OpenCodeAgentsDto = {
   agents: [
@@ -174,6 +181,30 @@ function renderPage() {
   );
 }
 
+function stubApplyState(pending = false) {
+  vi.mocked(useAgentApplyStatusQuery).mockReturnValue({
+    data: {
+      target: "/tmp/config/opencode/opencode.jsonc",
+      pending,
+      savedHash: pending ? "hash-saved" : null,
+      appliedHash: pending ? "hash-applied" : null,
+    },
+    isPending: false,
+    error: null,
+  } as unknown as ReturnType<typeof useAgentApplyStatusQuery>);
+  vi.mocked(useAgentApplyCapabilityQuery).mockReturnValue({
+    data: {
+      mechanism: "restart-manual",
+      reloadAvailable: false,
+      managedRuntime: false,
+      detail: "no reload command exists",
+      confirmRequired: true,
+    },
+    isPending: false,
+    error: null,
+  } as unknown as ReturnType<typeof useAgentApplyCapabilityQuery>);
+}
+
 function stubDeterministicContext(generation: "v1" | "v2" | null = "v1") {
   vi.mocked(useAgentEditorContextQuery).mockReturnValue({
     data: {
@@ -192,6 +223,7 @@ function stubDeterministicContext(generation: "v1" | "v2" | null = "v1") {
 
 describe("AgentsPage", () => {
   it("lists config-declared agents as read-only with their details", async () => {
+    stubApplyState();
     stubDeterministicContext();
     vi.mocked(useOpenCodeAgentsQuery).mockReturnValue({
       data: fixture,
@@ -269,6 +301,7 @@ describe("AgentsPage", () => {
   });
 
   it("opens the editor directly when the create generation is deterministic", async () => {
+    stubApplyState();
     stubDeterministicContext("v1");
     vi.mocked(useOpenCodeAgentsQuery).mockReturnValue({
       data: fixture,
@@ -284,6 +317,7 @@ describe("AgentsPage", () => {
   });
 
   it("requires an explicit syntax choice when both generations exist", async () => {
+    stubApplyState();
     stubDeterministicContext(null);
     vi.mocked(useOpenCodeAgentsQuery).mockReturnValue({
       data: { ...fixture, agents: [] },
@@ -304,6 +338,7 @@ describe("AgentsPage", () => {
   });
 
   it("supports creating on a fresh config with no agent section after an explicit choice", async () => {
+    stubApplyState();
     stubDeterministicContext(null);
     vi.mocked(useOpenCodeAgentsQuery).mockReturnValue({
       data: { ...fixture, agents: [] },
@@ -321,5 +356,20 @@ describe("AgentsPage", () => {
     await waitFor(() =>
       expect(screen.queryByText("New OpenCode sub-agent")).not.toBeInTheDocument(),
     );
+  });
+
+  it("shows the pending-apply badge and apply action from durable server state", async () => {
+    stubApplyState(true);
+    stubDeterministicContext("v1");
+    vi.mocked(useOpenCodeAgentsQuery).mockReturnValue({
+      data: fixture,
+      isPending: false,
+      error: null,
+    } as unknown as ReturnType<typeof useOpenCodeAgentsQuery>);
+
+    renderPage();
+
+    expect(await screen.findByText("Apply changes…")).toBeInTheDocument();
+    expect(await screen.findByText("Saved — pending apply in OpenCode")).toBeInTheDocument();
   });
 });

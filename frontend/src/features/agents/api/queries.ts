@@ -2,7 +2,11 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tansta
 
 import { queryPolicy } from "../../../lib/query";
 import {
+  acknowledgeManualApply,
+  applyAgentConfig,
   createAgent,
+  fetchAgentApplyCapability,
+  fetchAgentApplyStatus,
   fetchAgentEditorContext,
   fetchOpenCodeAgents,
   previewAgentCreate,
@@ -64,5 +68,41 @@ export function useUpdateAgentMutation() {
       fields: AgentFieldsInput; expectedSourceHash: string;
     }) => updateAgent(name, generation, fields, expectedSourceHash),
     onSuccess: () => void invalidateAgentQueries(queryClient),
+  });
+}
+
+export function useAgentApplyCapabilityQuery() {
+  return useQuery({
+    queryKey: agentKeys.applyCapability(),
+    queryFn: fetchAgentApplyCapability,
+    ...queryPolicy(AGENTS_STALE_TIME_MS, AGENTS_GC_TIME_MS),
+  });
+}
+
+export function useAgentApplyStatusQuery() {
+  return useQuery({
+    queryKey: agentKeys.applyStatus(),
+    queryFn: fetchAgentApplyStatus,
+    ...queryPolicy(AGENTS_STALE_TIME_MS, AGENTS_GC_TIME_MS),
+  });
+}
+
+export function useApplyAgentConfigMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ confirm }: { confirm: boolean }) => applyAgentConfig(confirm),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: agentKeys.applyStatus() });
+    },
+  });
+}
+
+export function useAcknowledgeManualApplyMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ confirm }: { confirm: boolean }) => acknowledgeManualApply(confirm),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: agentKeys.applyStatus() });
+    },
   });
 }
