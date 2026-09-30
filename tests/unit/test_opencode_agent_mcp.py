@@ -19,8 +19,23 @@ from skill_manager.application.container import build_backend_container
 
 class FakeMcpRuntime(BaseHTTPRequestHandler):
     payload = "{}"
+    tool_ids_payload: bytes | str | None = None  # None → 404 (endpoint absent).
 
     def do_GET(self):  # noqa: N802 - http.server API
+        if self.path == "/experimental/tool/ids":
+            if self.tool_ids_payload is None:
+                self.send_response(404)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            body = (self.tool_ids_payload if isinstance(self.tool_ids_payload, bytes)
+                    else self.tool_ids_payload.encode())
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         body = self.payload.encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -203,6 +218,51 @@ class McpServiceTests(unittest.TestCase):
         result = container.opencode_mcp_servers.servers()
         self.assertEqual(result["source"], "runtime")
         self.assertEqual(result["servers"][0]["name"], "clickup")
+
+
+class RuntimeToolIdsTests(unittest.TestCase):
+    """`GET /experimental/tool/ids` is consulted read-only as metadata."""
+
+    def setUp(self):
+        self.temp = TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+
+    def _serve(self):
+        FakeMcpRuntime.payload = json.dumps({"clickup": {"status": "connected"}})
+        server = ThreadingHTTPServer(("127.0.0.1", 0), FakeMcpRuntime)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(server.shutdown)
+        return f"http://127.0.0.1:{server.server_address[1]}"
+
+    def _service(self, url: str) -> OpenCodeMcpService:
+        return OpenCodeMcpService(resolve_context(base_env(self.root)), server_url=url)
+
+    def test_tool_ids_observed_live_shape_are_surfaced(self):
+        # Exact live 1.18.32 shape: a JSON array of built-in tool IDs.
+        FakeMcpRuntime.tool_ids_payload = json.dumps(
+            ["invalid", "question", "bash", "read", "glob"])
+        result = self._service(self._serve()).servers()
+        self.assertEqual(result["runtimeToolIds"], ["bash", "glob", "invalid", "question", "read"])
+
+    def test_missing_tool_ids_endpoint_degrades_gracefully(self):
+        FakeMcpRuntime.tool_ids_payload = None  # 404
+        result = self._service(self._serve()).servers()
+        self.assertEqual(result["source"], "runtime")
+        self.assertNotIn("runtimeToolIds", result)
+
+    def test_invalid_tool_ids_shape_is_dropped(self):
+        FakeMcpRuntime.tool_ids_payload = json.dumps({"not": "a list"})
+        result = self._service(self._serve()).servers()
+        self.assertNotIn("runtimeToolIds", result)
+
+    def test_tool_ids_absent_without_runtime(self):
+        FakeMcpRuntime.tool_ids_payload = '["bash"]'
+        service = OpenCodeMcpService(resolve_context(base_env(self.root)))  # No URL.
+        result = service.servers()
+        self.assertEqual(result["source"], "unavailable")
+        self.assertNotIn("runtimeToolIds", result)
 
 
 from skill_manager.opencode.agent_permissions import (

@@ -265,3 +265,107 @@ describe("ModelPicker — connected provider ordering", () => {
     expect(groupLabels[0]).toHaveTextContent("A Connected"); // Connected first.
   });
 });
+
+describe("ModelPicker — keyboard selection", () => {
+  function openAndFocus() {
+    const input = screen.getByRole("textbox", { name: /Model/i });
+    fireEvent.focus(input);
+    return input;
+  }
+
+  it("ArrowDown + Enter commits the highlighted catalogue model", () => {
+    const onChange = vi.fn();
+    renderPicker("", onChange);
+
+    const input = openAndFocus();
+    fireEvent.keyDown(input, { key: "ArrowDown" }); // Highlight Inherit.
+    fireEvent.keyDown(input, { key: "ArrowDown" }); // Highlight first model.
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(onChange).toHaveBeenCalledWith("anthropic/claude-sonnet-4-5");
+    expect(screen.queryByRole("option", { name: /Inherit parent/ })).not.toBeInTheDocument();
+  });
+
+  it("ArrowUp from no highlight wraps to the last option", () => {
+    const onChange = vi.fn();
+    renderPicker("", onChange);
+
+    const input = openAndFocus();
+    fireEvent.keyDown(input, { key: "ArrowUp" }); // Last option: openai/gpt-5.4.
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(onChange).toHaveBeenCalledWith("openai/gpt-5.4");
+  });
+
+  it("keyboard selection can reach Inherit and commit it", () => {
+    const onChange = vi.fn();
+    renderPicker("anthropic/claude-sonnet-4-5", onChange);
+
+    const input = openAndFocus();
+    fireEvent.keyDown(input, { key: "ArrowDown" }); // Inherit is first.
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(onChange).toHaveBeenCalledWith("");
+  });
+
+  it("Enter without an explicit highlight does NOT commit search text", () => {
+    const onChange = vi.fn();
+    renderPicker("", onChange);
+
+    const input = openAndFocus();
+    fireEvent.change(input, { target: { value: "some-random-text" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(onChange).not.toHaveBeenCalled(); // Search stays distinct from selection.
+  });
+
+  it("keyboard can commit the explicit custom-model option", () => {
+    const onChange = vi.fn();
+    renderPicker("", onChange);
+
+    const input = openAndFocus();
+    fireEvent.change(input, { target: { value: "custom/model-x" } });
+    fireEvent.keyDown(input, { key: "ArrowDown" }); // Inherit.
+    fireEvent.keyDown(input, { key: "ArrowDown" }); // Use custom model ID.
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(onChange).toHaveBeenCalledWith("custom/model-x");
+  });
+
+  it("Escape closes the dropdown without selecting", () => {
+    const onChange = vi.fn();
+    renderPicker("", onChange);
+
+    const input = openAndFocus();
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    fireEvent.keyDown(input, { key: "Escape" });
+
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.queryByRole("option", { name: /GPT-5.4/ })).not.toBeInTheDocument();
+  });
+
+  it("typing resets the highlight to the filtered list", () => {
+    const onChange = vi.fn();
+    renderPicker("", onChange);
+
+    const input = openAndFocus();
+    fireEvent.change(input, { target: { value: "gpt" } });
+    fireEvent.keyDown(input, { key: "ArrowDown" }); // Inherit.
+    fireEvent.keyDown(input, { key: "ArrowDown" }); // Use custom model ID: gpt.
+    fireEvent.keyDown(input, { key: "ArrowDown" }); // First catalogue match.
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(onChange).toHaveBeenCalledWith("openai/gpt-5.4");
+  });
+
+  it("highlights are exposed via aria-activedescendant for screen readers", () => {
+    renderPicker("", () => undefined);
+
+    const input = openAndFocus() as HTMLInputElement;
+    expect(input.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    const activeId = input.getAttribute("aria-activedescendant");
+    expect(activeId).toBeTruthy();
+    expect(document.getElementById(activeId ?? "")?.textContent).toContain("Inherit parent");
+  });
+});

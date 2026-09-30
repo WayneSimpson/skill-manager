@@ -118,6 +118,13 @@ class OpenCodeMcpService:
     def servers(self) -> dict[str, Any]:
         runtime = self._try_runtime()
         if runtime is not None:
+            # Supplementary read-only capability probe: the experimental tool-id
+            # endpoint. On current runtimes (verified live on 1.18.32) it lists
+            # built-in/native tool IDs only, so it is surfaced as metadata and
+            # never treated as MCP tool enumeration. Failure degrades silently.
+            tool_ids = self._try_runtime_tool_ids()
+            if tool_ids is not None:
+                runtime["runtimeToolIds"] = tool_ids
             return runtime
         config = self._try_config()
         if config is not None:
@@ -145,6 +152,25 @@ class OpenCodeMcpService:
             return result if result["servers"] else None
         except (OSError, URLError, ValueError):
             return None
+
+    def _try_runtime_tool_ids(self) -> list[str] | None:
+        """Read `GET /experimental/tool/ids`; return None when unavailable."""
+        if not self._server_url:
+            return None
+        try:
+            request = Request(
+                f"{self._server_url.rstrip('/')}/experimental/tool/ids",
+                headers={"User-Agent": "skill-manager"},
+            )
+            with urlopen(request, timeout=_MCP_TIMEOUT_SECONDS) as response:
+                payload = response.read(_MAX_RUNTIME_BYTES)
+            data = json.loads(payload)
+        except (OSError, URLError, ValueError):
+            return None
+        if not isinstance(data, list):
+            return None
+        ids = [item for item in data if isinstance(item, str) and item]
+        return sorted(dict.fromkeys(ids))
 
     def _try_config(self) -> dict[str, Any] | None:
         try:

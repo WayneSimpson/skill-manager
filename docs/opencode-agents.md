@@ -105,10 +105,14 @@ input's blur) *during* mousedown, before the click dispatches. Every option
 therefore prevents default on mousedown so focus never leaves the search input
 while an option is pressed, and the input's blur only closes the dropdown when
 focus genuinely leaves the picker (the next focus target is outside it). No
-timers are involved. Search text alone is never promoted to a model selection;
-an explicit "Use custom model ID" action remains for deliberate overrides, and
-"Inherit" stays selectable. Selecting a model closes the dropdown, populates
-the canonical `provider/model` value, and immediately re-derives the variant
+timers are involved. Keyboard selection is symmetric: ArrowDown/ArrowUp move a
+highlight through the same rendered order (Inherit, the explicit custom-model
+action when searching, then grouped models), Enter commits only the explicitly
+highlighted option, and Escape closes without selecting. Search text alone is
+never promoted to a model selection; an explicit "Use custom model ID" action
+remains for deliberate overrides, and "Inherit" stays selectable. Selecting a
+model closes the dropdown, populates the canonical `provider/model` value,
+clears an incompatible previous variant, and immediately re-derives the variant
 options for that model.
 
 ## MCP server permissions (Task 15)
@@ -125,7 +129,12 @@ browser never calls the OpenCode runtime directly:
   OpenCode runtime server URL (the same env override / runtime-snapshot
   derivation as the catalogue) and reports each server's status
   (connected/failed/needs-auth/disabled/unknown) plus the canonical wildcard
-  `{name}_*`.
+  `{name}_*`. When the runtime is reachable it additionally probes
+  `GET /experimental/tool/ids` and surfaces the observed built-in/native tool
+  IDs as `runtimeToolIds` metadata; on current runtimes (verified live on
+  1.18.32) that endpoint lists built-in tool IDs only — it does not enumerate
+  MCP tool IDs, so it never feeds the MCP rows. Both probes are read-only and
+  degrade silently.
 - When the runtime is unavailable, server names are derived from the resolved
   OpenCode configuration `mcp` section (`source: "config"`, status `unknown`).
   Both documented shapes are supported: the V1/direct map (`mcp.{name}`) and

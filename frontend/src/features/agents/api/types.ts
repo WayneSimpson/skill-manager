@@ -197,5 +197,11 @@ export interface McpServerDto {
 export interface McpServersDto {
   source: "runtime" | "config" | "unavailable";
   servers: McpServerDto[];
+  /**
+   * Built-in/native tool IDs observed from the runtime's experimental
+   * tool-id endpoint, when reachable. Capability metadata only: current
+   * runtimes do not enumerate MCP tool IDs there.
+   */
+  runtimeToolIds?: string[];
   detail?: string;
 }
