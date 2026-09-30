@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-import subprocess
 from tempfile import TemporaryDirectory
 import unittest
 
@@ -14,12 +13,12 @@ from skill_manager.application.skills.marketplace.skillssh import (
 from skill_manager.sources.github import (
     GitHubSource,
     ResolvedGitHubSkill,
-    _find_skill,
     _parse_locator,
     github_folder_url,
     github_owner_avatar_url,
     github_repo_from_locator,
     is_valid_github_repo,
+    matching_skill_roots,
 )
 
 from tests.support.fake_home import seed_skill_package
@@ -65,59 +64,107 @@ class ParseLocatorTests(unittest.TestCase):
         )
 
 
-class FindSkillTests(unittest.TestCase):
-    def test_find_skill_in_nested_directory(self) -> None:
+class MatchingSkillRootsTests(unittest.TestCase):
+    def test_single_directory_name_match(self) -> None:
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             seed_skill_package(root / "skills", "commit-message", "Commit Message")
-            result = _find_skill(root, "commit-message")
-            self.assertIsNotNone(result)
-            self.assertEqual(result.name, "commit-message")
+            matches = matching_skill_roots(root, "commit-message")
+            self.assertEqual(len(matches), 1)
+            self.assertEqual(matches[0].name, "commit-message")
 
-    def test_find_skill_returns_none_when_missing(self) -> None:
-        with TemporaryDirectory() as temp_dir:
-            result = _find_skill(Path(temp_dir), "nonexistent")
-            self.assertIsNone(result)
-
-
-class GitHubSourceTests(unittest.TestCase):
-    def test_fetch_from_local_bare_repo(self) -> None:
+    def test_frontmatter_name_match_without_directory_match(self) -> None:
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
-            repo_dir = root / "test-repo"
-            repo_dir.mkdir()
-            seed_skill_package(repo_dir / "skills", "my-skill", "My Skill")
-            subprocess.run(["git", "init"], cwd=repo_dir, capture_output=True, check=True)
-            subprocess.run(["git", "add", "."], cwd=repo_dir, capture_output=True, check=True)
-            subprocess.run(
-                ["git", "commit", "-m", "init", "--author", "test <t@t>"],
-                cwd=repo_dir,
-                capture_output=True,
-                check=True,
-                env={
-                    "GIT_COMMITTER_NAME": "test",
-                    "GIT_COMMITTER_EMAIL": "t@t",
-                    "HOME": str(root),
-                    "PATH": "/usr/bin:/bin:/usr/local/bin",
-                },
-            )
-            work = root / "work"
-            work.mkdir()
+            seed_skill_package(root / "renamed", "other-dir", "Frontmatter Skill")
+            matches = matching_skill_roots(root, "Frontmatter Skill")
+            self.assertEqual(len(matches), 1)
+            self.assertEqual(matches[0].name, "other-dir")
 
-            def local_fetch(locator: str, work_dir: Path) -> Path:
-                owner, repo, skill_dir = _parse_locator(locator)
-                clone_dir = work_dir / f"{owner}--{repo}"
-                subprocess.run(
-                    ["git", "clone", "--depth", "1", str(repo_dir), str(clone_dir)],
-                    check=True,
-                    capture_output=True,
-                    timeout=60,
-                )
-                return _find_skill(clone_dir, skill_dir)
+    def test_duplicate_directory_matches_are_all_reported(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            seed_skill_package(root / "a", "dup-skill", "First")
+            seed_skill_package(root / "b", "dup-skill", "Second")
+            matches = matching_skill_roots(root, "dup-skill")
+            self.assertEqual(len(matches), 2)
+            self.assertEqual({m.name for m in matches}, {"dup-skill"})
 
-            result = local_fetch("test/test-repo/my-skill", work)
-            self.assertIsNotNone(result)
-            self.assertTrue((result / "SKILL.md").is_file())
+    def test_duplicate_frontmatter_names_are_all_reported(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            seed_skill_package(root / "one", "dir-one", "Same Name")
+            seed_skill_package(root / "two", "dir-two", "Same Name")
+            matches = matching_skill_roots(root, "Same Name")
+            self.assertEqual(len(matches), 2)
+
+    def test_no_match_returns_empty(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            self.assertEqual(matching_skill_roots(Path(temp_dir), "nonexistent"), ())
+
+
+class GitHubSourceResolveTests(unittest.TestCase):
+    """resolve() reuses the bounded archive primitive with explicit ambiguity."""
+
+    @staticmethod
+    def _fixture_source(repo_tree: Path, revision: str = "a" * 40):
+        source = GitHubSource()
+        original = GitHubSource.acquire_repository
+
+        def fake_acquire(self, repo, work_dir, *, ref=None, alias_targets=None):
+            root = work_dir / "repository"
+            root.parent.mkdir(parents=True, exist_ok=True)
+            import shutil
+            shutil.copytree(repo_tree, root)
+            return root, revision
+
+        GitHubSource.acquire_repository = fake_acquire
+        return source, lambda: setattr(GitHubSource, "acquire_repository", original)
+
+    def test_resolve_returns_exact_revision_and_relative_path(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            base = Path(temp_dir)
+            root = base / "repo"
+            seed_skill_package(root / "skills", "my-skill", "My Skill")
+            source, restore = self._fixture_source(root)
+            self.addCleanup(restore)
+            resolved = source.resolve("test/test-repo/my-skill", base / "work")
+            self.assertEqual(resolved.repo, "test/test-repo")
+            self.assertEqual(resolved.ref, "a" * 40)  # Exact commit, not branch name.
+            self.assertEqual(resolved.relative_path, "skills/my-skill")
+            self.assertTrue((resolved.package_path / "SKILL.md").is_file())
+
+    def test_resolve_missing_skill_raises_not_found(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            base = Path(temp_dir)
+            root = base / "repo"
+            seed_skill_package(root / "skills", "my-skill", "My Skill")
+            source, restore = self._fixture_source(root)
+            self.addCleanup(restore)
+            with self.assertRaisesRegex(ValueError, "not found"):
+                source.resolve("test/test-repo/no-such-skill", base / "work")
+
+    def test_resolve_duplicate_matches_is_explicitly_ambiguous(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            base = Path(temp_dir)
+            root = base / "repo"
+            seed_skill_package(root / "one", "dup-skill", "First")
+            seed_skill_package(root / "two", "dup-skill", "Second")
+            source, restore = self._fixture_source(root)
+            self.addCleanup(restore)
+            with self.assertRaisesRegex(ValueError, "matches multiple locations"):
+                source.resolve("test/test-repo/dup-skill", base / "work")
+
+    def test_fetch_returns_resolved_package_path(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            base = Path(temp_dir)
+            root = base / "repo"
+            seed_skill_package(root / "skills", "my-skill", "My Skill")
+            source, restore = self._fixture_source(root)
+            self.addCleanup(restore)
+            package_path = source.fetch("test/test-repo/my-skill", base / "work")
+            self.assertTrue((package_path / "SKILL.md").is_file())
+
 
     def test_resolved_skill_keeps_nested_repo_path(self) -> None:
         resolved = ResolvedGitHubSkill(

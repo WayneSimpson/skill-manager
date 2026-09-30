@@ -1,8 +1,14 @@
 from __future__ import annotations
 
+import base64
+import io
+import json
 from pathlib import Path
+import stat
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
+from zipfile import ZipFile, ZipInfo
 
 from skill_manager.application.skills.marketplace import MarketplaceCatalog
 from skill_manager.application.skills.marketplace.client import SkillsShClient
@@ -219,6 +225,90 @@ class SkillsMarketplaceApiTests(unittest.TestCase):
             payload = harness.post_json("/api/marketplace/install", {}, expected_status=422)
 
         self.assertIn("installToken", payload["error"])
+
+
+class MarketplaceInstallConsolidationTests(unittest.TestCase):
+    """Marketplace install runs end-to-end on the consolidated archive path."""
+
+    REVISION = "b" * 40
+
+    @staticmethod
+    def _install_token(kind: str, locator: str) -> str:
+        raw = json.dumps([kind, locator]).encode("utf-8")
+        return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+    @staticmethod
+    def _zip_entry(archive: ZipFile, name: str, content: str) -> None:
+        # The bounded extractor requires explicit regular-file attributes.
+        info = ZipInfo("fixture-repo-main/" + name)
+        info.create_system = 3
+        info.external_attr = (stat.S_IFREG | 0o644) << 16
+        archive.writestr(info, content)
+
+    def _archive(self) -> bytes:
+        buffer = io.BytesIO()
+        with ZipFile(buffer, "w") as archive:
+            self._zip_entry(
+                archive,
+                "skills/mode-switch/SKILL.md",
+                "---\nname: mode-switch\ndescription: Mode Switch skill\n---\n"
+                "Switches modes when marketplace install tests run.",
+            )
+        return buffer.getvalue()
+
+    def _serve_github(self, url: str, **_kwargs) -> bytes:
+        if "/commits/" in url:
+            return json.dumps({"sha": self.REVISION}).encode()
+        if "codeload.github.com" in url:
+            return self._archive()
+        raise AssertionError(f"unexpected public source URL: {url}")
+
+    def test_marketplace_install_uses_bounded_archive_acquisition(self) -> None:
+        with patch("skill_manager.sources.github.read_public_bytes") as read:
+            read.side_effect = self._serve_github
+            with AppTestHarness(marketplace=create_fixture_marketplace_service()) as harness:
+                token = self._install_token("github", "github:mode-io/fixture-repo/mode-switch")
+                result = harness.post_json("/api/marketplace/install", {"installToken": token})
+                self.assertEqual(result, {"ok": True})
+
+                rows = harness.get_json("/api/skills")["rows"]
+                self.assertEqual(len(rows), 1)
+                self.assertEqual(rows[0]["name"], "mode-switch")
+                # The consolidated path records the exact resolved commit as
+                # the standalone skill's source ref in the store.
+                scan = harness.container.skills_read_models.store.scan()
+                self.assertEqual(len(scan.packages), 1)
+                package = scan.packages[0]
+                self.assertEqual(package.package.source.kind, "github")
+                self.assertEqual(
+                    package.package.source.locator,
+                    "github:mode-io/fixture-repo/mode-switch")
+                self.assertEqual(package.recorded_source_ref, self.REVISION)
+
+    def test_marketplace_install_reports_ambiguous_skill_matches(self) -> None:
+        def serve_ambiguous(url: str, **_kwargs) -> bytes:
+            if "/commits/" in url:
+                return json.dumps({"sha": self.REVISION}).encode()
+            if "codeload.github.com" in url:
+                buffer = io.BytesIO()
+                with ZipFile(buffer, "w") as archive:
+                    self._zip_entry(
+                        archive, "a/mode-switch/SKILL.md",
+                        "---\nname: mode-switch\ndescription: duplicate one\n---\nbody")
+                    self._zip_entry(
+                        archive, "b/mode-switch/SKILL.md",
+                        "---\nname: mode-switch\ndescription: duplicate two\n---\nbody")
+                return buffer.getvalue()
+            raise AssertionError(f"unexpected public source URL: {url}")
+
+        with patch("skill_manager.sources.github.read_public_bytes") as read:
+            read.side_effect = serve_ambiguous
+            with AppTestHarness(marketplace=create_fixture_marketplace_service()) as harness:
+                token = self._install_token("github", "github:mode-io/fixture-repo/mode-switch")
+                payload = harness.post_json(
+                    "/api/marketplace/install", {"installToken": token}, expected_status=400)
+                self.assertIn("matches multiple locations", payload["error"])
+                self.assertEqual(harness.get_json("/api/skills")["rows"], [])
 
 
 if __name__ == "__main__":

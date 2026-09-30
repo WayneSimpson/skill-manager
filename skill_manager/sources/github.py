@@ -2,11 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
-import os
 from pathlib import Path
 import re
 import socket
-import subprocess
 import time
 from typing import Callable
 from urllib.error import HTTPError, URLError
@@ -175,48 +173,6 @@ class GitHubRepoMetadataClient:
         return value
 
 
-def _find_skill(clone_dir: Path, skill_dir: str) -> Path | None:
-    for skill_md in clone_dir.rglob("SKILL.md"):
-        if skill_md.parent.name == skill_dir:
-            return skill_md.parent
-    for skill_md in clone_dir.rglob("SKILL.md"):
-        try:
-            content = skill_md.read_text(encoding="utf-8")
-            for line in content.splitlines()[1:]:
-                if line.strip() == "---":
-                    break
-                if line.startswith("name:"):
-                    name_value = line.split(":", 1)[1].strip().strip("'\"")
-                    if name_value == skill_dir:
-                        return skill_md.parent
-        except Exception:  # noqa: BLE001
-            continue
-    return None
-
-
-def matching_skill_roots(clone_dir: Path, identifier: str) -> tuple[Path, ...]:
-    """Exact marketplace identifier matches, without the legacy first-match policy."""
-    matches = set()
-    for document in clone_dir.rglob('SKILL.md'):
-        if document.is_symlink() or not document.is_file() or document.stat().st_size > 1024 * 1024:
-            continue
-        if document.parent.name == identifier:
-            matches.add(document.parent)
-            continue
-        with document.open(encoding='utf-8') as stream:
-            content = stream.read(1024 * 1024 + 1)
-        lines = content.splitlines()
-        if lines[:1] != ['---']:
-            continue
-        for line in lines[1:]:
-            if line.strip() == '---':
-                break
-            if line.startswith('name:') and line.split(':', 1)[1].strip().strip("'\"") == identifier:
-                matches.add(document.parent)
-                break
-    return tuple(sorted(matches))
-
-
 def _normalize_relative_path(relative_path: str | None) -> str:
     if relative_path is None:
         return "."
@@ -251,52 +207,56 @@ class GitHubSource:
         return root, revision
 
     def resolve(self, locator: str, work_dir: Path) -> ResolvedGitHubSkill:
+        """Resolve a standalone GitHub skill locator onto an immutable snapshot.
+
+        Uses the same bounded, inert archive acquisition as authoritative
+        package fetching (no git subprocess, no repository code execution) and
+        the shared exact-match locator with explicit ambiguity: multiple exact
+        matches are an error rather than a silent first-match selection.
+        """
         owner, repo_name, skill_dir = _parse_locator(locator)
-        clone_dir = work_dir / f"{owner}--{repo_name}"
-        subprocess.run(
-            [
-                "git",
-                "clone",
-                "--depth",
-                "1",
-                f"https://github.com/{owner}/{repo_name}.git",
-                str(clone_dir),
-            ],
-            check=True,
-            capture_output=True,
-            timeout=60,
-            env={**os.environ, 'GIT_TERMINAL_PROMPT': '0', 'GIT_ASKPASS': 'true'},
-        )
-        skill_path = _find_skill(clone_dir, skill_dir)
-        if skill_path is None:
-            raise ValueError(f"skill directory '{skill_dir}' not found in {owner}/{repo_name}")
+        repo = f"{owner}/{repo_name}"
+        acquire_dir = work_dir / "acquire"
+        acquire_dir.mkdir(parents=True, exist_ok=True)
+        root, revision = self.acquire_repository(repo, acquire_dir)
+        matches = matching_skill_roots(root, skill_dir)
+        if not matches:
+            raise ValueError(f"skill directory '{skill_dir}' not found in {repo}")
+        if len(matches) > 1:
+            locations = ", ".join(path.relative_to(root).as_posix() for path in matches)
+            raise ValueError(
+                f"skill '{skill_dir}' matches multiple locations in {repo}: {locations}")
+        skill_path = matches[0]
         return ResolvedGitHubSkill(
-            repo=f"{owner}/{repo_name}",
-            ref=self._checked_out_ref(clone_dir),
-            relative_path=_normalize_relative_path(skill_path.relative_to(clone_dir).as_posix()),
+            repo=repo,
+            ref=revision,
+            relative_path=_normalize_relative_path(skill_path.relative_to(root).as_posix()),
             package_path=skill_path,
-            clone_dir=clone_dir,
+            clone_dir=root,
         )
 
     def fetch(self, locator: str, work_dir: Path) -> Path:
         return self.resolve(locator, work_dir).package_path
 
-    @staticmethod
-    def _checked_out_ref(clone_dir: Path) -> str | None:
-        branch = subprocess.run(
-            ["git", "-C", str(clone_dir), "rev-parse", "--abbrev-ref", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=10,
-        ).stdout.strip()
-        if branch and branch != "HEAD":
-            return branch
-        commit = subprocess.run(
-            ["git", "-C", str(clone_dir), "rev-parse", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=10,
-        ).stdout.strip()
-        return commit or None
+
+def matching_skill_roots(clone_dir: Path, identifier: str) -> tuple[Path, ...]:
+    """Exact marketplace identifier matches, without the legacy first-match policy."""
+    matches = set()
+    for document in clone_dir.rglob('SKILL.md'):
+        if document.is_symlink() or not document.is_file() or document.stat().st_size > 1024 * 1024:
+            continue
+        if document.parent.name == identifier:
+            matches.add(document.parent)
+            continue
+        with document.open(encoding='utf-8') as stream:
+            content = stream.read(1024 * 1024 + 1)
+        lines = content.splitlines()
+        if lines[:1] != ['---']:
+            continue
+        for line in lines[1:]:
+            if line.strip() == '---':
+                break
+            if line.startswith('name:') and line.split(':', 1)[1].strip().strip("'\"") == identifier:
+                matches.add(document.parent)
+                break
+    return tuple(sorted(matches))
