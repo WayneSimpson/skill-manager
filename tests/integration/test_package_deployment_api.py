@@ -87,6 +87,18 @@ class PackageDeploymentApiTests(unittest.TestCase):
         self.action('codex', 'remove', status=409)
         self.assertEqual(count, len(self.fixture.codex.mutations))
 
+    def test_claude_native_local_update_is_advertised_and_executes(self):
+        # Claude update is a service-side native-local replacement and does
+        # NOT require an adapter reinstall method; the view must expose it.
+        self.action('claude', 'deploy')
+        newer = self.fixture.adopt(self.store, 'b', '2.0.0')
+        row = self.row(self.app.get_json(self.endpoint()), 'claude')
+        self.assertEqual([option['packageId'] for option in row['replacementOptions']], [newer['id']])
+        self.assertIn('update', row['actions'])
+        result = self.action('claude', 'update', replacementPackageId=newer['id'])
+        self.assertEqual(result['packageId'], newer['id'])
+        self.assertEqual(self.row(result, 'claude')['state'], 'enabled')
+
     def test_stale_artifact_blocks_all_actions(self):
         self.action('claude', 'deploy')
         (Path(self.package['artifactRoot']) / 'changed.txt').write_text('changed')

@@ -279,7 +279,13 @@ class SkillsQueryService:
         )
         selected = self.managed_packages.get(plan.selected_package_id) if plan.selected_package_id else None
         payload['source'] = selected['source'] if selected else None
-        if deployment is not None and payload['actions'] and not blockers and callable(getattr(adapter, "reinstall", None)):
+        # Update/Replace availability mirrors the deployment service's actual
+        # requirement: native-install harnesses (codex/opencode) re-register
+        # through adapter.reinstall, while native-local harnesses (claude) are
+        # replaced directly by the service and need no adapter reinstall.
+        if deployment is not None and payload['actions'] and not blockers and (
+                plan.strategy != 'native-install'
+                or callable(getattr(adapter, "reinstall", None))):
             payload['replacementOptions'] = self._replacement_options(package_id, deployment, adapter)
             if payload['replacementOptions']:
                 payload['actions'].append('update')
