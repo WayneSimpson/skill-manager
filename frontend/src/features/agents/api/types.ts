@@ -182,3 +182,20 @@ export interface PermissionActionsDto {
   v2: string[];
   effects: string[];
 }
+
+export interface McpServerDto {
+  /** Configured MCP server name, used verbatim to derive the wildcard. */
+  name: string;
+  /** Runtime connection status (connected/failed/needs-auth/disabled/unknown). */
+  status: string;
+  /** Runtime error detail when the server failed to connect. */
+  error: string | null;
+  /** Canonical server-wide permission wildcard, e.g. `n8n_nccio_*`. */
+  wildcard: string;
+}
+
+export interface McpServersDto {
+  source: "runtime" | "config" | "unavailable";
+  servers: McpServerDto[];
+  detail?: string;
+}

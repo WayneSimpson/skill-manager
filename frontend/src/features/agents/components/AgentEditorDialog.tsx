@@ -9,6 +9,7 @@ import { PermissionEditor } from "./PermissionEditor";
 import {
   useAgentEditorContextQuery,
   useCreateAgentMutation,
+  useMcpServersQuery,
   useModelCatalogueQuery,
   usePreviewAgentCreateMutation,
   usePreviewAgentUpdateMutation,
@@ -40,6 +41,7 @@ export function AgentEditorDialog({ open, mode, onOpenChange, onSaved }: AgentEd
   const copy = useAgentsCopy();
   const contextQuery = useAgentEditorContextQuery();
   const catalogueQuery = useModelCatalogueQuery();
+  const mcpQuery = useMcpServersQuery();
   const isCreate = mode.kind === "create";
   const generation = isCreate ? mode.generation : mode.agent.schemaGeneration;
 
@@ -287,6 +289,8 @@ export function AgentEditorDialog({ open, mode, onOpenChange, onSaved }: AgentEd
                 generation={generation}
                 rules={form.permissionRules}
                 onChange={handlePermissionsChange}
+                mcpServers={mcpQuery.data?.servers}
+                mcpSource={mcpQuery.data?.source}
               />
             </div>
           ) : (

@@ -18,6 +18,7 @@ RESERVED_AGENT_ROUTE_NAMES = frozenset({
     "permission-actions",
     "apply-capability",
     "apply-status",
+    "mcp-servers",
 })
 from skill_manager.opencode.resolver import (
     OpenCodeConfigSource,

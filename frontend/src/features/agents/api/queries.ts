@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tansta
 import { queryPolicy } from "../../../lib/query";
 import {
   acknowledgeManualApply,
+  fetchMcpServers,
   fetchModelCatalogue,
   fetchPermissionActions,
   applyAgentConfig,
@@ -123,5 +124,15 @@ export function usePermissionActionsQuery() {
     queryKey: agentKeys.permissionActions(),
     queryFn: fetchPermissionActions,
     staleTime: 5 * 60_000,
+  });
+}
+
+export function useMcpServersQuery() {
+  return useQuery({
+    queryKey: agentKeys.mcpServers(),
+    queryFn: fetchMcpServers,
+    // MCP connection state changes rarely; still cheap to refetch.
+    staleTime: 60_000,
+    gcTime: 5 * 60_000,
   });
 }

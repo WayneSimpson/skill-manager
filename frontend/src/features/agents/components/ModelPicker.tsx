@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import type { ModelCatalogueDto, ModelCatalogueEntryDto } from "../api/types";
 import { useAgentsCopy } from "../i18n";
@@ -16,6 +16,7 @@ export function ModelPicker({ value, onChange, catalogue, disabled }: ModelPicke
   const copy = useAgentsCopy();
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   const { grouped, isCustom, customLabel } = useMemo(() => {
     if (!catalogue?.providers?.length) return { grouped: [], isCustom: false, customLabel: "" };
@@ -53,8 +54,20 @@ export function ModelPicker({ value, onChange, catalogue, disabled }: ModelPicke
     return <input className="agents-editor__input" value={value} disabled />;
   }
 
+  // Browsers move focus (and fire input blur) DURING mousedown, before the
+  // click event dispatches. Preventing default on the option's mousedown keeps
+  // focus on the search input, so the dropdown stays mounted and the click
+  // reliably reaches the option handler. The blur handler additionally only
+  // closes when focus is genuinely leaving the picker (relatedTarget outside),
+  // covering keyboard and programmatic focus moves.
+  function select(value_: string) {
+    onChange(value_);
+    setSearch("");
+    setOpen(false);
+  }
+
   return (
-    <div className="model-picker">
+    <div className="model-picker" ref={rootRef}>
       <input
         type="text"
         className="agents-editor__input"
@@ -64,7 +77,9 @@ export function ModelPicker({ value, onChange, catalogue, disabled }: ModelPicke
           setOpen(true);
           setSearch("");
         }}
-        onBlur={() => {
+        onBlur={(event) => {
+          const next = event.relatedTarget as Node | null;
+          if (next && rootRef.current?.contains(next)) return; // Focus within picker.
           setOpen(false);
           // Search text is search text, NOT a model selection.
         }}
@@ -81,10 +96,8 @@ export function ModelPicker({ value, onChange, catalogue, disabled }: ModelPicke
             className="model-picker__option model-picker__option--inherit"
             role="option"
             aria-selected={value === ""}
-            onClick={() => {
-              onChange("");
-              setOpen(false);
-            }}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => select("")}
           >
             {copy.editor.modelPicker.inherit}
           </button>
@@ -97,10 +110,8 @@ export function ModelPicker({ value, onChange, catalogue, disabled }: ModelPicke
               className="model-picker__option model-picker__option--custom"
               role="option"
               aria-selected={false}
-              onClick={() => {
-                onChange(search.trim());
-                setOpen(false);
-              }}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => select(search.trim())}
             >
               {copy.editor.modelPicker.useCustom?.(search.trim()) ?? `Use custom model ID: ${search.trim()}`}
             </button>
@@ -115,10 +126,8 @@ export function ModelPicker({ value, onChange, catalogue, disabled }: ModelPicke
                   className={`model-picker__option${value === model.id ? " is-selected" : ""}`}
                   role="option"
                   aria-selected={value === model.id}
-                  onClick={() => {
-                    onChange(model.id);
-                    setOpen(false);
-                  }}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => select(model.id)}
                 >
                   <span className="model-picker__name">{model.name}</span>
                   <span className="model-picker__id">{model.id}</span>

@@ -43,6 +43,7 @@ def build_opencode_capability_detector(env: dict[str, str]):
     return OpenCodeCapabilityDetector(command_registry=registry)
 from .agents import OpenCodeAgentApplyService, OpenCodeAgentMutationService, OpenCodeAgentQueryService
 from skill_manager.opencode.agent_catalogue import OpenCodeAgentCatalogueService
+from skill_manager.opencode.agent_mcp import OpenCodeMcpService
 from .invalidation import InvalidationFanout
 from .mcp.enrichment import McpEnrichmentService
 from .mcp.marketplace import McpMarketplaceCatalog
@@ -122,6 +123,7 @@ class BackendContainer:
     opencode_agent_mutations: OpenCodeAgentMutationService
     opencode_agent_apply: OpenCodeAgentApplyService
     opencode_agent_catalogue: OpenCodeAgentCatalogueService
+    opencode_mcp_servers: OpenCodeMcpService
     db: Database
     scan_config_service: ScanConfigService
     scan_service: ScanService
@@ -249,6 +251,11 @@ def build_backend_container(
         harness_kernel.context,
         server_url=catalogue_server_url,
     )
+    # MCP server discovery shares the same derived runtime connection.
+    opencode_mcp_servers = OpenCodeMcpService(
+        harness_kernel.context,
+        server_url=catalogue_server_url,
+    )
     opencode_agent_mutations = OpenCodeAgentMutationService(
         harness_kernel, paths.state_dir / "opencode-agent-backups",
         apply_store=agent_apply_store,
@@ -309,6 +316,7 @@ def build_backend_container(
         opencode_agent_mutations=opencode_agent_mutations,
         opencode_agent_apply=opencode_agent_apply,
         opencode_agent_catalogue=opencode_agent_catalogue,
+        opencode_mcp_servers=opencode_mcp_servers,
         db=db,
         scan_config_service=scan_config_service,
         scan_service=scan_service,

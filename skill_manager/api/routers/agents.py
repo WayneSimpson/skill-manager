@@ -57,6 +57,13 @@ def opencode_agent_model_catalogue(
     return container.opencode_agent_catalogue.catalogue()
 
 
+@router.get("/opencode/mcp-servers")
+def opencode_agent_mcp_servers(
+    container: BackendContainer = Depends(get_container),
+) -> dict[str, object]:
+    return container.opencode_mcp_servers.servers()
+
+
 @router.get("/opencode/permission-actions")
 def opencode_agent_permission_actions(
     container: BackendContainer = Depends(get_container),

@@ -9,6 +9,7 @@ import type { OpenCodeAgentDto } from "../api/types";
 import {
   useAgentEditorContextQuery,
   useCreateAgentMutation,
+  useModelCatalogueQuery,
   usePreviewAgentCreateMutation,
   usePreviewAgentUpdateMutation,
   useUpdateAgentMutation,
@@ -226,5 +227,52 @@ describe("AgentEditorDialog", () => {
       await screen.findByText(/changed concurrently/i),
     ).toBeInTheDocument();
     expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+  });
+});
+
+describe("AgentEditorDialog — model picker drives variant options", () => {
+  it("selecting a model from the picker populates the field and updates variants", async () => {
+    vi.mocked(useModelCatalogueQuery).mockReturnValue({
+      data: {
+        source: "runtime" as const,
+        totalModels: 1,
+        providers: [
+          {
+            id: "anthropic", name: "Anthropic", source: "env", connected: true,
+            models: [
+              {
+                id: "anthropic/claude-sonnet-4-5", providerId: "anthropic",
+                providerName: "Anthropic", name: "Claude Sonnet 4.5",
+                status: "active", reasoning: true, variants: ["low", "medium", "high"],
+              },
+            ],
+          },
+        ],
+      },
+      isPending: false,
+      error: null,
+    } as ReturnType<typeof useModelCatalogueQuery>);
+
+    renderDialog({ kind: "create", generation: "v1" });
+
+    // No variant select before a model is chosen (free-text input instead).
+    expect(screen.queryByRole("combobox", { name: /Reasoning/ })).not.toBeInTheDocument();
+
+    // Browser-realistic pointer selection through the picker.
+    const input = screen.getByRole("textbox", { name: /Model/i });
+    fireEvent.focus(input);
+    const option = screen.getByRole("option", { name: /Claude Sonnet 4.5/ });
+    fireEvent.mouseDown(option, { buttons: 1 });
+    fireEvent.blur(input, { relatedTarget: option });
+    fireEvent.click(option);
+
+    // The variant selector now offers exactly the selected model's variants.
+    const variantSelect = await screen.findByRole("combobox", { name: /Reasoning \/ Variant/ });
+    const options = Array.from((variantSelect as HTMLSelectElement).options);
+    expect(options.map((o) => o.value)).toEqual(["", "low", "medium", "high"]);
+
+    // Choose a variant and confirm it sticks.
+    fireEvent.change(variantSelect, { target: { value: "high" } });
+    expect((variantSelect as HTMLSelectElement).value).toBe("high");
   });
 });

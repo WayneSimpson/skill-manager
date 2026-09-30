@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 
-import type { ModelCatalogueDto, PermissionRuleDto } from "../api/types";
+import type { McpServerDto, ModelCatalogueDto, PermissionRuleDto } from "../api/types";
 import { useAgentsCopy } from "../i18n";
 
 interface PermissionEditorProps {
@@ -8,6 +8,10 @@ interface PermissionEditorProps {
   rules: PermissionRuleDto[];
   onChange: (rules: PermissionRuleDto[]) => void;
   catalogue?: ModelCatalogueDto;
+  /** Discovered MCP servers; when present, server-wide wildcard rules become first-class rows. */
+  mcpServers?: McpServerDto[];
+  /** Discovery source ("runtime" | "config" | "unavailable") for the hint line. */
+  mcpSource?: string;
   disabled?: boolean;
 }
 
@@ -31,28 +35,59 @@ const COMMON_ACTION_LABELS: Record<string, { v1: string; v2: string }> = {
 
 const EFFECTS = ["inherit", "allow", "ask", "deny"] as const;
 
+/**
+ * Server-wide wildcard match, mirroring OpenCode's documented per-generation
+ * semantics: V1 server-wide rules carry no resource, V2 server-wide rules
+ * carry resource "*" ({"action":"context7_*","resource":"*"}). The action must
+ * be the canonical `{name}_*` form or the legacy no-underscore `{name}*` form.
+ * Exact per-tool rules and other resource-scoped rules do NOT match
+ * (they stay in Advanced).
+ */
+function ruleMatchesServer(
+  rule: PermissionRuleDto,
+  server: McpServerDto,
+  generation: "v1" | "v2",
+): boolean {
+  if (rule.rawValue !== undefined) return false;
+  const expectedResource = generation === "v2" ? "*" : null;
+  if (rule.resource !== expectedResource) return false;
+  return rule.action === server.wildcard || rule.action === `${server.name}*`;
+}
+
 export function PermissionEditor({
   generation,
   rules,
   onChange,
+  mcpServers,
+  mcpSource,
   disabled,
 }: PermissionEditorProps) {
   const copy = useAgentsCopy();
 
-  const { commonActions, advancedRules } = useMemo(() => {
+  const { commonActions, advancedRules, mcpRows } = useMemo(() => {
     const common = new Set(
       Object.keys(COMMON_ACTION_LABELS)
         .map((action) => COMMON_ACTION_LABELS[action][generation])
         .filter(Boolean),
     );
+    const hasMcp = Array.isArray(mcpServers) && mcpServers.length > 0;
     const commonList: { action: string; label: string; effect: string }[] = [];
     const advanced: PermissionRuleDto[] = [];
     const seen = new Set<string>();
+    // Server name → matched rules (first match drives the row's effect).
+    const mcpMatches = new Map<string, PermissionRuleDto[]>();
 
     for (const rule of rules) {
       const label = COMMON_ACTION_LABELS[rule.action]?.[generation];
       const key = `${rule.action}:${rule.resource ?? ""}`;
-      if (label && !rule.resource && !seen.has(rule.action)) {
+      const mcpServer = hasMcp
+        ? mcpServers.find((server) => ruleMatchesServer(rule, server, generation))
+        : undefined;
+      if (mcpServer) {
+        const list = mcpMatches.get(mcpServer.name) ?? [];
+        list.push(rule);
+        mcpMatches.set(mcpServer.name, list);
+      } else if (label && !rule.resource && !seen.has(rule.action)) {
         commonList.push({ action: rule.action, label, effect: rule.effect });
         seen.add(rule.action);
       } else if (!common.has(rule.action) || rule.resource || seen.has(key)) {
@@ -74,8 +109,15 @@ export function PermissionEditor({
       rule,
       sourceIndex: rules.indexOf(rule),
     }));
-    return { commonActions: commonList, advancedRules: advancedIndexed };
-  }, [rules, generation]);
+    // One row per discovered server; new agents default to inherit.
+    const rows = (mcpServers ?? []).map((server) => ({
+      server,
+      // Inherit markers on the wire render as Inherit, not the marker effect.
+      effect: (mcpMatches.get(server.name) ?? []).find((r) => r.effect !== "inherit")?.effect
+        ?? "inherit",
+    }));
+    return { commonActions: commonList, advancedRules: advancedIndexed, mcpRows: rows };
+  }, [rules, generation, mcpServers]);
 
   function setEffect(action: string, effect: PermissionRuleDto["effect"]) {
     const existing = rules.find((r) => r.action === action && !r.resource);
@@ -93,6 +135,42 @@ export function PermissionEditor({
     }
   }
 
+  function setMcpEffect(server: McpServerDto, effect: PermissionRuleDto["effect"]) {
+    const matches = rules.filter((rule) => ruleMatchesServer(rule, server, generation));
+    if (effect === "inherit") {
+      if (matches.length > 0) {
+        // Explicit inherit markers so the backend removes ONLY the exact
+        // wildcard overrides for this server (legacy action form and the
+        // generation-native resource form preserved).
+        const matched = new Set(matches);
+        onChange(rules.map((rule) =>
+          matched.has(rule) ? { ...rule, effect: "inherit" as const } : rule));
+      } else {
+        onChange(rules.filter((rule) => !ruleMatchesServer(rule, server, generation)));
+      }
+      return;
+    }
+    if (matches.length > 0) {
+      // Update the EXISTING rule(s) in place — spread preserves the action
+      // (including legacy forms), resource, and V2 order.
+      const matched = new Set(matches);
+      onChange(rules.map((rule) => (matched.has(rule) ? { ...rule, effect } : rule)));
+      return;
+    }
+    // New override: append with the canonical wildcard derived server-side,
+    // using the generation-native server-wide resource form.
+    const nextOrder = rules.reduce((max, rule) => Math.max(max, rule.order ?? 0), -1) + 1;
+    onChange([
+      ...rules,
+      {
+        action: server.wildcard,
+        effect: effect as PermissionRuleDto["effect"],
+        resource: generation === "v2" ? "*" : null,
+        order: nextOrder,
+      },
+    ]);
+  }
+
   function updateAdvanced(sourceIndex: number, patch: Partial<PermissionRuleDto>) {
     onChange(rules.map((r, i) => (i === sourceIndex ? { ...r, ...patch } : r)));
   }
@@ -104,6 +182,8 @@ export function PermissionEditor({
   function addAdvanced() {
     onChange([...rules, { action: "", effect: "allow", resource: "" }]);
   }
+
+  const mcpCopy = copy.editor.permissions.mcp;
 
   return (
     <div className="permission-editor">
@@ -138,6 +218,65 @@ export function PermissionEditor({
         </tbody>
       </table>
 
+      {mcpServers ? (
+        <div className="permission-editor__mcp">
+          <h4 className="permission-editor__mcp-title">{mcpCopy.title}</h4>
+          {mcpSource ? (
+            <p className="permission-editor__hint">
+              {mcpCopy.sourceHint[mcpSource] ?? mcpCopy.sourceHint.unavailable}
+            </p>
+          ) : null}
+          {mcpServers.length > 0 ? (
+            <table className="permission-editor__table" aria-label={mcpCopy.title}>
+              <thead>
+                <tr>
+                  <th>{mcpCopy.server}</th>
+                  <th>{mcpCopy.statusLabel}</th>
+                  <th>{mcpCopy.wildcardLabel}</th>
+                  <th>{copy.editor.permissions.effect}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {mcpRows.map(({ server, effect }) => (
+                  <tr key={server.name}>
+                    <td>{server.name}</td>
+                    <td>
+                      <span
+                        className={`permission-editor__mcp-status is-${server.status}`}
+                        title={server.error ?? undefined}
+                      >
+                        {mcpCopy.statuses[server.status] ?? server.status}
+                        {server.error ? " ⚠" : ""}
+                      </span>
+                    </td>
+                    <td>
+                      <code>{server.wildcard}</code>
+                    </td>
+                    <td>
+                      <select
+                        value={effect}
+                        disabled={disabled}
+                        onChange={(event) =>
+                          setMcpEffect(server, event.target.value as PermissionRuleDto["effect"])}
+                        aria-label={`${mcpCopy.server} ${server.name}`}
+                      >
+                        {EFFECTS.map((e) => (
+                          <option key={e} value={e}>
+                            {mcpCopy.effects[e]}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : mcpSource ? null : (
+            <p className="permission-editor__hint">{mcpCopy.sourceHint.unavailable}</p>
+          )}
+        </div>
+      ) : null}
+
       <details className="permission-editor__advanced">
         <summary>{copy.editor.permissions.advanced}</summary>
         <p className="permission-editor__hint">{copy.editor.permissions.advancedHint}</p>
@@ -155,7 +294,9 @@ export function PermissionEditor({
               value={rule.resource ?? ""}
               disabled={disabled}
               onChange={(event) =>
-                updateAdvanced(sourceIndex, { resource: event.target.value || null })
+                updateAdvanced(sourceIndex, {
+                  resource: event.target.value || null,
+                })
               }
               aria-label={`${copy.editor.permissions.resourcePlaceholder} ${sourceIndex + 1}`}
             />

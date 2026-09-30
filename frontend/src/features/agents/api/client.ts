@@ -100,7 +100,7 @@ export async function acknowledgeManualApply(confirm: boolean): Promise<AgentAck
     confirm,
   });
 }
-import type { ModelCatalogueDto, PermissionActionsDto } from "./types";
+import type { McpServersDto, ModelCatalogueDto, PermissionActionsDto } from "./types";
 
 export async function fetchModelCatalogue(): Promise<ModelCatalogueDto> {
   return fetchJson<ModelCatalogueDto>("/agents/opencode/model-catalogue");
@@ -108,4 +108,8 @@ export async function fetchModelCatalogue(): Promise<ModelCatalogueDto> {
 
 export async function fetchPermissionActions(): Promise<PermissionActionsDto> {
   return fetchJson<PermissionActionsDto>("/agents/opencode/permission-actions");
+}
+
+export async function fetchMcpServers(): Promise<McpServersDto> {
+  return fetchJson<McpServersDto>("/agents/opencode/mcp-servers");
 }

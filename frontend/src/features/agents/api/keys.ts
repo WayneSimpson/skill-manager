@@ -6,6 +6,7 @@ export const agentKeys = {
   applyStatus: () => ["agents", "opencode", "apply-status"] as const,
   modelCatalogue: () => ["agents", "opencode", "model-catalogue"] as const,
   permissionActions: () => ["agents", "opencode", "permission-actions"] as const,
+  mcpServers: () => ["agents", "opencode", "mcp-servers"] as const,
 };
 
 export const AGENTS_STALE_TIME_MS = 10_000;

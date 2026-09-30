@@ -68,6 +68,12 @@ class AgentRouteOrderingTests(unittest.TestCase):
         self.assertIn("pending", result)
         self.assertIn("target", result)
 
+    def test_mcp_servers_returns_server_list_not_agent_detail(self):
+        result = self._harness.get_json("/api/agents/opencode/mcp-servers")
+        self.assertIn("source", result)
+        self.assertIn("servers", result)
+        self.assertNotIn("readOnly", result)
+
     def test_ordinary_agent_name_still_resolves(self):
         result = self._harness.get_json("/api/agents/opencode/reviewer")
         self.assertEqual(result["name"], "reviewer")

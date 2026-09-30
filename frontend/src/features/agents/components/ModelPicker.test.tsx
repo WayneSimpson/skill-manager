@@ -146,6 +146,102 @@ describe("ModelPicker — search is not selection", () => {
   });
 });
 
+describe("ModelPicker — browser-realistic pointer selection", () => {
+  // A real browser moves focus DURING mousedown on the option button, firing
+  // the input's blur BEFORE the click event dispatches. These tests replay
+  // that exact ordering; selection must survive it.
+
+  function openDropdown() {
+    const input = screen.getByRole("textbox", { name: /Model/i });
+    fireEvent.focus(input);
+    return input;
+  }
+
+  it("pointer click on a model survives input blur and selects the model", () => {
+    const onChange = vi.fn();
+    renderPicker("", onChange);
+
+    const input = openDropdown();
+    const option = screen.getByRole("option", { name: /GPT-5.4/ });
+    // Browser sequence: mousedown begins, focus leaves the input (blur with
+    // relatedTarget = the pressed option), then the click dispatches.
+    fireEvent.mouseDown(option, { buttons: 1 });
+    fireEvent.blur(input, { relatedTarget: option });
+    fireEvent.click(option);
+
+    expect(onChange).toHaveBeenCalledWith("openai/gpt-5.4");
+  });
+
+  it("dropdown stays mounted while the pressed option takes focus, then closes after click", () => {
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <LocaleProvider>
+        <ModelPicker value="" onChange={onChange} catalogue={catalogue} />
+      </LocaleProvider>,
+    );
+
+    const input = openDropdown();
+    const option = screen.getByRole("option", { name: /Claude Sonnet 4.5/ });
+    fireEvent.mouseDown(option, { buttons: 1 });
+    fireEvent.blur(input, { relatedTarget: option });
+    // Still open mid-press: the blur target is inside the picker.
+    expect(screen.getByRole("option", { name: /Claude Sonnet 4.5/ })).toBeInTheDocument();
+    fireEvent.click(option);
+    expect(onChange).toHaveBeenCalledWith("anthropic/claude-sonnet-4-5");
+
+    // After the controlled value updates, the dropdown is closed and the
+    // selected model is displayed in the field.
+    rerender(
+      <LocaleProvider>
+        <ModelPicker value="anthropic/claude-sonnet-4-5" onChange={onChange} catalogue={catalogue} />
+      </LocaleProvider>,
+    );
+    expect(screen.queryByRole("option", { name: /Claude Sonnet 4.5/ })).not.toBeInTheDocument();
+    expect((screen.getByRole("textbox", { name: /Model/i }) as HTMLInputElement).value)
+      .toBe("anthropic/claude-sonnet-4-5");
+  });
+
+  it("blur to an element OUTSIDE the picker closes the dropdown without selecting", () => {
+    const onChange = vi.fn();
+    renderPicker("", onChange);
+
+    const input = openDropdown();
+    const outside = document.createElement("button");
+    document.body.appendChild(outside);
+    fireEvent.blur(input, { relatedTarget: outside });
+
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.queryByRole("option", { name: /GPT-5.4/ })).not.toBeInTheDocument();
+  });
+
+  it("pointer selection of Inherit survives blur", () => {
+    const onChange = vi.fn();
+    renderPicker("anthropic/claude-sonnet-4-5", onChange);
+
+    const input = openDropdown();
+    const inherit = screen.getByRole("option", { name: /Inherit parent/ });
+    fireEvent.mouseDown(inherit, { buttons: 1 });
+    fireEvent.blur(input, { relatedTarget: inherit });
+    fireEvent.click(inherit);
+
+    expect(onChange).toHaveBeenCalledWith("");
+  });
+
+  it("explicit custom-model pointer selection survives blur", () => {
+    const onChange = vi.fn();
+    renderPicker("", onChange);
+
+    const input = openDropdown();
+    fireEvent.change(input, { target: { value: "custom/model-x" } });
+    const custom = screen.getByRole("option", { name: /Use custom model ID/ });
+    fireEvent.mouseDown(custom, { buttons: 1 });
+    fireEvent.blur(input, { relatedTarget: custom });
+    fireEvent.click(custom);
+
+    expect(onChange).toHaveBeenCalledWith("custom/model-x");
+  });
+});
+
 describe("ModelPicker — connected provider ordering", () => {
   it("renders connected providers before disconnected ones", () => {
     const mixedCatalogue: ModelCatalogueDto = {

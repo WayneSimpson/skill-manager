@@ -84,7 +84,7 @@ Single-segment names that match static API routes under `/api/agents/opencode/`
 are reserved and cannot be used for new agents or renames:
 
 `editor-context`, `variant-options`, `model-catalogue`, `permission-actions`,
-`apply-capability`, `apply-status`.
+`apply-capability`, `apply-status`, `mcp-servers`.
 
 Route matching is method-aware, so names matching POST-only routes (such as
 `apply`) are not reserved — an agent named `apply` is still addressable via
@@ -96,6 +96,66 @@ already contains a reserved-name agent remains discoverable in the listing
 without corruption; such an agent is shown read-only with a
 `reserved-api-route-name` reason because the static route takes precedence
 over the `GET /opencode/{name}` detail path.
+
+## Model picker interaction (Task 15)
+
+The agent editor's model picker is a searchable combobox over the live model
+catalogue. Real browser pointer interaction moves focus (and fires the search
+input's blur) *during* mousedown, before the click dispatches. Every option
+therefore prevents default on mousedown so focus never leaves the search input
+while an option is pressed, and the input's blur only closes the dropdown when
+focus genuinely leaves the picker (the next focus target is outside it). No
+timers are involved. Search text alone is never promoted to a model selection;
+an explicit "Use custom model ID" action remains for deliberate overrides, and
+"Inherit" stays selectable. Selecting a model closes the dropdown, populates
+the canonical `provider/model` value, and immediately re-derives the variant
+options for that model.
+
+## MCP server permissions (Task 15)
+
+Configured MCP servers are first-class permission rows in the agent editor,
+visible without opening Advanced. Each row shows the configured server name,
+its live connection status, the underlying permission wildcard, and an
+Inherit/Allow/Ask/Deny selector.
+
+Discovery extends the same capability layer used by the model catalogue; the
+browser never calls the OpenCode runtime directly:
+
+- `GET /api/agents/opencode/mcp-servers` reads `GET /mcp` from the configured
+  OpenCode runtime server URL (the same env override / runtime-snapshot
+  derivation as the catalogue) and reports each server's status
+  (connected/failed/needs-auth/disabled/unknown) plus the canonical wildcard
+  `{name}_*`.
+- When the runtime is unavailable, server names are derived from the resolved
+  OpenCode configuration `mcp` section (`source: "config"`, status `unknown`).
+  Both documented shapes are supported: the V1/direct map (`mcp.{name}`) and
+  the V2 nested map (`mcp.servers.{name}`). When both shapes appear, the
+  nested `servers` entries win per name and the literal `servers` key is never
+  treated as a server name.
+- With neither, the endpoint reports `source: "unavailable"` and existing MCP
+  rules remain editable under Advanced.
+
+Wildcard association is exact, deterministic, and generation-aware. A rule
+belongs to a server's row when its action is the canonical `{name}_*` form or
+the legacy no-underscore `{name}*` form (e.g. `playwright*`) **and** it uses
+the generation-native server-wide resource form: V1 server-wide rules carry no
+resource, while V2 server-wide rules carry `resource: "*"`
+(`{"action":"context7_*","resource":"*","effect":"deny"}`). New overrides are
+created with the matching form (V1 resource-less, V2 `resource:"*"`). Exact
+per-tool rules (`clickup_create_task`), other resource-scoped rules, and
+wildcards for servers that are no longer configured stay in Advanced
+untouched. A legacy wildcard such as `playwright*` is displayed truthfully on
+its row and is never rewritten unless the user changes it; changing the
+effect updates the existing rule in place preserving its resource and order,
+and Inherit emits an inherit marker so the backend removes only that exact
+override. New agents show every discovered server as Inherit and persist only
+explicit overrides (appended with the canonical wildcard). V1 persists the
+`permission` object syntax; V2 persists ordered `permissions` rules preserving
+order and unknown fields. No V1→V2 migration occurs.
+
+OpenCode's runtime in this environment does not reliably enumerate individual
+MCP tools, so the section works at server-wide granularity only; per-tool and
+custom overrides remain in Advanced.
 
 ## Safe create/edit persistence (Task 12)
 

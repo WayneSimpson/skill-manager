@@ -7130,6 +7130,26 @@
         "summary": "Opencode Agent Editor Context"
       }
     },
+    "/api/agents/opencode/mcp-servers": {
+      "get": {
+        "operationId": "opencode_agent_mcp_servers_api_agents_opencode_mcp_servers_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Opencode Agent Mcp Servers Api Agents Opencode Mcp Servers Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Opencode Agent Mcp Servers"
+      }
+    },
     "/api/agents/opencode/model-catalogue": {
       "get": {
         "operationId": "opencode_agent_model_catalogue_api_agents_opencode_model_catalogue_get",
