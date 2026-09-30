@@ -170,10 +170,6 @@ def _build_agent(
         model_base, model_raw = raw_model, raw_model
         additional.pop("model", None)
 
-    reasons: list[str] = []
-    if source is not None and not source.is_write_target:
-        reasons.append("declared-outside-selected-config-source")
-
     return OpenCodeAgent(
         name=name,
         schema_generation=generation,
@@ -193,8 +189,8 @@ def _build_agent(
         tools=known.get("tools"),
         additional_options=additional,
         source=source,
-        editability="config" if not reasons else "read-only",
-        read_only_reasons=tuple(reasons),
+        editability="config" if source is not None else "read-only",
+        read_only_reasons=() if source is not None else ("declaring-source-unresolved",),
     )
 
 
@@ -280,8 +276,9 @@ def discover_config_agents(context: ResolutionContext) -> OpenCodeAgentDiscovery
 def _with_reasons(agent: OpenCodeAgent, reasons: tuple[str, ...]) -> OpenCodeAgent:
     from dataclasses import replace
 
+    # Informational only: each entry is generation-specific and the mutation
+    # service requires an explicit schemaGeneration, so no guessing occurs.
     return replace(
         agent,
-        editability="read-only",
         read_only_reasons=tuple(dict.fromkeys((*agent.read_only_reasons, *reasons))),
     )

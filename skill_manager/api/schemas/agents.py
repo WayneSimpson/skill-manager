@@ -65,3 +65,85 @@ __all__ = [
     "OpenCodeAgentsResponse",
     "OpenCodeConfigSourceResponse",
 ]
+
+
+class AgentFieldsRequest(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    instructions: str | None = None
+    model: str | None = None
+    variant: str | None = None
+    mode: str | None = None
+    renameTo: str | None = None
+
+
+class AgentPreviewCreateRequest(BaseModel):
+    schemaGeneration: Literal["v1", "v2"]
+    fields: AgentFieldsRequest
+
+
+class AgentPreviewUpdateRequest(BaseModel):
+    fields: AgentFieldsRequest
+
+
+class AgentCreateRequest(BaseModel):
+    schemaGeneration: Literal["v1", "v2"]
+    fields: AgentFieldsRequest
+    expectedSourceHash: str
+
+
+class AgentUpdateRequest(BaseModel):
+    fields: AgentFieldsRequest
+    expectedSourceHash: str
+
+
+class AgentBackupResponse(BaseModel):
+    file: str
+    path: str
+
+
+class AgentPreviewResponse(BaseModel):
+    mode: Literal["create", "update"]
+    generation: Literal["v1", "v2"]
+    targetFile: str
+    sourceHash: str
+    old: dict[str, Any] | None = None
+    new: dict[str, Any]
+    renameTo: str | None = None
+    textDiff: list[str]
+
+
+class AgentSaveResponse(BaseModel):
+    agent: OpenCodeAgentResponse
+    changed: bool
+    pendingApply: bool
+    backup: AgentBackupResponse | None = None
+
+
+class AgentEditorContextResponse(BaseModel):
+    writeTarget: str
+    create: dict[str, Any]
+    sourceHash: str
+    readOnly: bool
+
+
+class AgentVariantOptionsResponse(BaseModel):
+    options: list[str]
+
+
+__all__ = [
+    "OpenCodeAgentResponse",
+    "OpenCodeAgentSourceResponse",
+    "OpenCodeAgentsResponse",
+    "OpenCodeConfigSourceResponse",
+    "AgentFieldsRequest",
+    "AgentPreviewCreateRequest",
+    "AgentPreviewUpdateRequest",
+    "AgentCreateRequest",
+    "AgentUpdateRequest",
+    "AgentBackupResponse",
+    "AgentPreviewResponse",
+    "AgentSaveResponse",
+    "AgentEditorContextResponse",
+    "AgentVariantOptionsResponse",
+]

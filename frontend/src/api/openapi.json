@@ -56,6 +56,333 @@
         "title": "AdoptMcpRequest",
         "type": "object"
       },
+      "AgentBackupResponse": {
+        "properties": {
+          "file": {
+            "title": "File",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file",
+          "path"
+        ],
+        "title": "AgentBackupResponse",
+        "type": "object"
+      },
+      "AgentCreateRequest": {
+        "properties": {
+          "expectedSourceHash": {
+            "title": "Expectedsourcehash",
+            "type": "string"
+          },
+          "fields": {
+            "$ref": "#/components/schemas/AgentFieldsRequest"
+          },
+          "schemaGeneration": {
+            "enum": [
+              "v1",
+              "v2"
+            ],
+            "title": "Schemageneration",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schemaGeneration",
+          "fields",
+          "expectedSourceHash"
+        ],
+        "title": "AgentCreateRequest",
+        "type": "object"
+      },
+      "AgentEditorContextResponse": {
+        "properties": {
+          "create": {
+            "additionalProperties": true,
+            "title": "Create",
+            "type": "object"
+          },
+          "readOnly": {
+            "title": "Readonly",
+            "type": "boolean"
+          },
+          "sourceHash": {
+            "title": "Sourcehash",
+            "type": "string"
+          },
+          "writeTarget": {
+            "title": "Writetarget",
+            "type": "string"
+          }
+        },
+        "required": [
+          "writeTarget",
+          "create",
+          "sourceHash",
+          "readOnly"
+        ],
+        "title": "AgentEditorContextResponse",
+        "type": "object"
+      },
+      "AgentFieldsRequest": {
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "instructions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instructions"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "renameTo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Renameto"
+          },
+          "variant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variant"
+          }
+        },
+        "title": "AgentFieldsRequest",
+        "type": "object"
+      },
+      "AgentPreviewCreateRequest": {
+        "properties": {
+          "fields": {
+            "$ref": "#/components/schemas/AgentFieldsRequest"
+          },
+          "schemaGeneration": {
+            "enum": [
+              "v1",
+              "v2"
+            ],
+            "title": "Schemageneration",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schemaGeneration",
+          "fields"
+        ],
+        "title": "AgentPreviewCreateRequest",
+        "type": "object"
+      },
+      "AgentPreviewResponse": {
+        "properties": {
+          "generation": {
+            "enum": [
+              "v1",
+              "v2"
+            ],
+            "title": "Generation",
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "create",
+              "update"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "new": {
+            "additionalProperties": true,
+            "title": "New",
+            "type": "object"
+          },
+          "old": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Old"
+          },
+          "renameTo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Renameto"
+          },
+          "sourceHash": {
+            "title": "Sourcehash",
+            "type": "string"
+          },
+          "targetFile": {
+            "title": "Targetfile",
+            "type": "string"
+          },
+          "textDiff": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Textdiff",
+            "type": "array"
+          }
+        },
+        "required": [
+          "mode",
+          "generation",
+          "targetFile",
+          "sourceHash",
+          "new",
+          "textDiff"
+        ],
+        "title": "AgentPreviewResponse",
+        "type": "object"
+      },
+      "AgentPreviewUpdateRequest": {
+        "properties": {
+          "fields": {
+            "$ref": "#/components/schemas/AgentFieldsRequest"
+          }
+        },
+        "required": [
+          "fields"
+        ],
+        "title": "AgentPreviewUpdateRequest",
+        "type": "object"
+      },
+      "AgentSaveResponse": {
+        "properties": {
+          "agent": {
+            "$ref": "#/components/schemas/OpenCodeAgentResponse"
+          },
+          "backup": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentBackupResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "changed": {
+            "title": "Changed",
+            "type": "boolean"
+          },
+          "pendingApply": {
+            "title": "Pendingapply",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "agent",
+          "changed",
+          "pendingApply"
+        ],
+        "title": "AgentSaveResponse",
+        "type": "object"
+      },
+      "AgentUpdateRequest": {
+        "properties": {
+          "expectedSourceHash": {
+            "title": "Expectedsourcehash",
+            "type": "string"
+          },
+          "fields": {
+            "$ref": "#/components/schemas/AgentFieldsRequest"
+          }
+        },
+        "required": [
+          "fields",
+          "expectedSourceHash"
+        ],
+        "title": "AgentUpdateRequest",
+        "type": "object"
+      },
+      "AgentVariantOptionsResponse": {
+        "properties": {
+          "options": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Options",
+            "type": "array"
+          }
+        },
+        "required": [
+          "options"
+        ],
+        "title": "AgentVariantOptionsResponse",
+        "type": "object"
+      },
       "BulkManageFailureResponse": {
         "properties": {
           "error": {
@@ -6352,6 +6679,202 @@
           }
         },
         "summary": "List Opencode Agents"
+      },
+      "post": {
+        "operationId": "create_opencode_agent_api_agents_opencode_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentSaveResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Opencode Agent"
+      }
+    },
+    "/api/agents/opencode/editor-context": {
+      "get": {
+        "operationId": "opencode_agent_editor_context_api_agents_opencode_editor_context_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentEditorContextResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Opencode Agent Editor Context"
+      }
+    },
+    "/api/agents/opencode/preview-create": {
+      "post": {
+        "operationId": "preview_opencode_agent_create_api_agents_opencode_preview_create_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentPreviewCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentPreviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Opencode Agent Create"
+      }
+    },
+    "/api/agents/opencode/preview-update/{name}": {
+      "post": {
+        "operationId": "preview_opencode_agent_update_api_agents_opencode_preview_update__name__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "schemaGeneration",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Schemageneration"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentPreviewUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentPreviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Opencode Agent Update"
+      }
+    },
+    "/api/agents/opencode/variant-options": {
+      "get": {
+        "operationId": "opencode_agent_variant_options_api_agents_opencode_variant_options_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "model",
+            "required": true,
+            "schema": {
+              "title": "Model",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentVariantOptionsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Opencode Agent Variant Options"
       }
     },
     "/api/agents/opencode/{name}": {
@@ -6365,6 +6888,22 @@
             "schema": {
               "title": "Name",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "schemaGeneration",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Schemageneration"
             }
           }
         ],
@@ -6391,6 +6930,69 @@
           }
         },
         "summary": "Get Opencode Agent"
+      },
+      "put": {
+        "operationId": "update_opencode_agent_api_agents_opencode__name__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "schemaGeneration",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Schemageneration"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentSaveResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Opencode Agent"
       }
     },
     "/api/health": {

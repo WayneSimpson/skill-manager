@@ -56,3 +56,47 @@ export interface OpenCodeAgentsDto {
   diagnostics: string[];
   limitation: string;
 }
+
+export interface AgentEditorContextDto {
+  writeTarget: string;
+  create: {
+    targetGeneration: AgentSchemaGeneration | null;
+    requiresGenerationChoice: boolean;
+    reason?: string;
+  };
+  sourceHash: string;
+  readOnly: boolean;
+}
+
+export interface AgentFieldsInput {
+  name?: string | null;
+  description?: string | null;
+  instructions?: string | null;
+  model?: string | null;
+  variant?: string | null;
+  mode?: string | null;
+  renameTo?: string | null;
+}
+
+export interface AgentPreviewDto {
+  mode: "create" | "update";
+  generation: AgentSchemaGeneration;
+  targetFile: string;
+  sourceHash: string;
+  old: Record<string, unknown> | null;
+  new: Record<string, unknown>;
+  renameTo: string | null;
+  textDiff: string[];
+}
+
+export interface AgentBackupDto {
+  file: string;
+  path: string;
+}
+
+export interface AgentSaveResultDto {
+  agent: OpenCodeAgentDto;
+  changed: boolean;
+  pendingApply: boolean;
+  backup: AgentBackupDto | null;
+}

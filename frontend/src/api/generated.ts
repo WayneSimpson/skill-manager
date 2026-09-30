@@ -14,6 +14,75 @@ export interface paths {
         /** List Opencode Agents */
         get: operations["list_opencode_agents_api_agents_opencode_get"];
         put?: never;
+        /** Create Opencode Agent */
+        post: operations["create_opencode_agent_api_agents_opencode_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agents/opencode/editor-context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Opencode Agent Editor Context */
+        get: operations["opencode_agent_editor_context_api_agents_opencode_editor_context_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agents/opencode/preview-create": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview Opencode Agent Create */
+        post: operations["preview_opencode_agent_create_api_agents_opencode_preview_create_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agents/opencode/preview-update/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview Opencode Agent Update */
+        post: operations["preview_opencode_agent_update_api_agents_opencode_preview_update__name__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agents/opencode/variant-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Opencode Agent Variant Options */
+        get: operations["opencode_agent_variant_options_api_agents_opencode_variant_options_get"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -30,7 +99,8 @@ export interface paths {
         };
         /** Get Opencode Agent */
         get: operations["get_opencode_agent_api_agents_opencode__name__get"];
-        put?: never;
+        /** Update Opencode Agent */
+        put: operations["update_opencode_agent_api_agents_opencode__name__put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1048,6 +1118,116 @@ export interface components {
             name: string;
             /** Observed harness */
             observedHarness?: string | null;
+        };
+        /** AgentBackupResponse */
+        AgentBackupResponse: {
+            /** File */
+            file: string;
+            /** Path */
+            path: string;
+        };
+        /** AgentCreateRequest */
+        AgentCreateRequest: {
+            /** Expectedsourcehash */
+            expectedSourceHash: string;
+            fields: components["schemas"]["AgentFieldsRequest"];
+            /**
+             * Schemageneration
+             * @enum {string}
+             */
+            schemaGeneration: "v1" | "v2";
+        };
+        /** AgentEditorContextResponse */
+        AgentEditorContextResponse: {
+            /** Create */
+            create: {
+                [key: string]: unknown;
+            };
+            /** Readonly */
+            readOnly: boolean;
+            /** Sourcehash */
+            sourceHash: string;
+            /** Writetarget */
+            writeTarget: string;
+        };
+        /** AgentFieldsRequest */
+        AgentFieldsRequest: {
+            /** Description */
+            description?: string | null;
+            /** Instructions */
+            instructions?: string | null;
+            /** Mode */
+            mode?: string | null;
+            /** Model */
+            model?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Renameto */
+            renameTo?: string | null;
+            /** Variant */
+            variant?: string | null;
+        };
+        /** AgentPreviewCreateRequest */
+        AgentPreviewCreateRequest: {
+            fields: components["schemas"]["AgentFieldsRequest"];
+            /**
+             * Schemageneration
+             * @enum {string}
+             */
+            schemaGeneration: "v1" | "v2";
+        };
+        /** AgentPreviewResponse */
+        AgentPreviewResponse: {
+            /**
+             * Generation
+             * @enum {string}
+             */
+            generation: "v1" | "v2";
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "create" | "update";
+            /** New */
+            new: {
+                [key: string]: unknown;
+            };
+            /** Old */
+            old?: {
+                [key: string]: unknown;
+            } | null;
+            /** Renameto */
+            renameTo?: string | null;
+            /** Sourcehash */
+            sourceHash: string;
+            /** Targetfile */
+            targetFile: string;
+            /** Textdiff */
+            textDiff: string[];
+        };
+        /** AgentPreviewUpdateRequest */
+        AgentPreviewUpdateRequest: {
+            fields: components["schemas"]["AgentFieldsRequest"];
+        };
+        /** AgentSaveResponse */
+        AgentSaveResponse: {
+            agent: components["schemas"]["OpenCodeAgentResponse"];
+            backup?: components["schemas"]["AgentBackupResponse"] | null;
+            /** Changed */
+            changed: boolean;
+            /** Pendingapply */
+            pendingApply: boolean;
+        };
+        /** AgentUpdateRequest */
+        AgentUpdateRequest: {
+            /** Expectedsourcehash */
+            expectedSourceHash: string;
+            fields: components["schemas"]["AgentFieldsRequest"];
+        };
+        /** AgentVariantOptionsResponse */
+        AgentVariantOptionsResponse: {
+            /** Options */
+            options: string[];
         };
         /** BulkManageFailureResponse */
         BulkManageFailureResponse: {
@@ -3079,9 +3259,165 @@ export interface operations {
             };
         };
     };
-    get_opencode_agent_api_agents_opencode__name__get: {
+    create_opencode_agent_api_agents_opencode_post: {
         parameters: {
             query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSaveResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    opencode_agent_editor_context_api_agents_opencode_editor_context_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEditorContextResponse"];
+                };
+            };
+        };
+    };
+    preview_opencode_agent_create_api_agents_opencode_preview_create_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentPreviewCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_opencode_agent_update_api_agents_opencode_preview_update__name__post: {
+        parameters: {
+            query?: {
+                schemaGeneration?: string | null;
+            };
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentPreviewUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    opencode_agent_variant_options_api_agents_opencode_variant_options_get: {
+        parameters: {
+            query: {
+                model: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentVariantOptionsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_opencode_agent_api_agents_opencode__name__get: {
+        parameters: {
+            query?: {
+                schemaGeneration?: string | null;
+            };
             header?: never;
             path: {
                 name: string;
@@ -3097,6 +3433,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OpenCodeAgentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_opencode_agent_api_agents_opencode__name__put: {
+        parameters: {
+            query?: {
+                schemaGeneration?: string | null;
+            };
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSaveResponse"];
                 };
             };
             /** @description Validation Error */

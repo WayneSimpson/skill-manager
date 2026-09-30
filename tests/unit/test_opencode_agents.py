@@ -139,7 +139,7 @@ class OpenCodeAgentDiscoveryTests(unittest.TestCase):
         self.assertEqual(agent.variant, "high")
         self.assertEqual(agent.additional_options, {"reasoningEffort": "high"})
 
-    def test_both_sections_preserved_safely_with_read_only_ambiguity(self):
+    def test_both_sections_preserved_with_generation_specific_entries(self):
         write(
             self.home / ".config/opencode/opencode.jsonc",
             """{
@@ -153,7 +153,9 @@ class OpenCodeAgentDiscoveryTests(unittest.TestCase):
         generations = {agent.schema_generation for agent in discovery.agents}
         self.assertEqual(generations, {"v1", "v2"})
         for agent in discovery.agents:
-            self.assertEqual(agent.editability, "read-only")
+            # Both generation-specific entries stay editable: the backend
+            # requires an explicit schemaGeneration, so nothing is guessed.
+            self.assertEqual(agent.editability, "config")
             self.assertIn("defined-in-both-v1-and-v2-sections", agent.read_only_reasons)
         self.assertTrue(any("both" in item for item in discovery.diagnostics))
 
@@ -171,9 +173,10 @@ class OpenCodeAgentDiscoveryTests(unittest.TestCase):
         self.assertEqual(set(by_name), {"legacy-agent", "modern-agent"})
         self.assertEqual(by_name["legacy-agent"].source.path, legacy)
         self.assertFalse(by_name["legacy-agent"].source.is_write_target)
-        self.assertEqual(by_name["legacy-agent"].editability, "read-only")
-        self.assertIn("declared-outside-selected-config-source",
-                      by_name["legacy-agent"].read_only_reasons)
+        # Task 12: a supported config-defined definition is editable in its
+        # declaring file even when that file is not the selected write target.
+        self.assertEqual(by_name["legacy-agent"].editability, "config")
+        self.assertEqual(by_name["legacy-agent"].read_only_reasons, ())
         self.assertEqual(by_name["modern-agent"].source.path, modern)
         self.assertTrue(by_name["modern-agent"].source.is_write_target)
         self.assertEqual(by_name["modern-agent"].editability, "config")

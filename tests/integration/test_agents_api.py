@@ -44,19 +44,21 @@ class OpenCodeAgentsApiTests(unittest.TestCase):
             self.assertEqual(set(by_generation), {"reviewer", "broken", "v2-writer"})
 
             v1_reviewer = next(a for a in by_generation["reviewer"] if a["schemaGeneration"] == "v1")
-            self.assertTrue(v1_reviewer["readOnly"])
-            self.assertEqual(v1_reviewer["editability"], "read-only")  # ambiguous name
+            self.assertFalse(v1_reviewer["readOnly"])  # editable with explicit generation
+            self.assertEqual(v1_reviewer["editability"], "config")
             self.assertIn("defined-in-both-v1-and-v2-sections", v1_reviewer["readOnlyReasons"])
             self.assertEqual(v1_reviewer["instructions"], None)  # V1 fixture has no prompt here
             self.assertEqual(v1_reviewer["variant"], "high")
             self.assertEqual(v1_reviewer["additionalOptions"], {"variant": "high"})
 
             v2_reviewer = next(a for a in by_generation["reviewer"] if a["schemaGeneration"] == "v2")
+            self.assertFalse(v2_reviewer["readOnly"])
             self.assertEqual(v2_reviewer["instructions"], "New system.")
             self.assertEqual(v2_reviewer["prompt"], "New system.")  # legacy alias
             self.assertIn("defined-in-both-v1-and-v2-sections", v2_reviewer["readOnlyReasons"])
 
             writer = by_generation["v2-writer"][0]
+            self.assertFalse(writer["readOnly"])
             self.assertEqual(writer["schemaGeneration"], "v2")
             self.assertEqual(writer["instructions"], "Write docs.")
             self.assertEqual(writer["model"], "anthropic/claude-haiku-4-5")
@@ -70,6 +72,7 @@ class OpenCodeAgentsApiTests(unittest.TestCase):
             broken = by_generation["broken"][0]
             self.assertFalse(broken["valid"])
             self.assertEqual(broken["schemaGeneration"], "v1")
+            self.assertTrue(broken["readOnly"])
             self.assertEqual(broken["editability"], "read-only")
             self.assertIn("definition-not-an-object", broken["readOnlyReasons"])
 

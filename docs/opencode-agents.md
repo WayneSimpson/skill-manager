@@ -63,9 +63,48 @@ lifecycle defined by PRD Section 16.
 - `GET /api/agents/opencode` — list with write target, per-source status and
   diagnostics.
 - `GET /api/agents/opencode/{name}` — one agent (404 when unknown).
+- `GET /api/agents/opencode/editor-context` — write target, deterministic
+  create-generation decision and current source hash.
+- `GET /api/agents/opencode/variant-options?model=` — model-specific variant
+  options read from OpenCode's own model catalog when available (never a
+  hard-coded set).
+- `POST /api/agents/opencode/preview-create` / `preview-update/{name}` —
+  human-readable diff of the exact proposed change; writes nothing.
+- `POST /api/agents/opencode` / `PUT /api/agents/opencode/{name}` — guarded save.
 
-Both are read-only. `prompt`/`permission` are legacy aliases of the canonical
+Both reads are read-only. `prompt`/`permission` are legacy aliases of the canonical
 `instructions`/`permissions`. The UI area (`/agents`) lists agents with a
 generation badge, shows Instructions and Reasoning/Variant as first-class
 fields, preserved additional options, permissions, and source/editability
 state, with an explicit read-only badge.
+
+## Safe create/edit persistence (Task 12)
+
+The editor writes only the declaring configuration file, surgically replacing
+one agent member so unrelated settings, unknown keys, sibling agents and all
+JSONC comments outside the edited definition remain byte-identical. Editing a
+legacy-file definition patches it in place; definitions are never migrated
+between V1 and V2 syntax, and the read syntax (`schemaGeneration`) is carried
+through every write.
+
+Guardrails around every save:
+
+- The complete candidate configuration is validated before anything is written.
+- The source hash must match what the user reviewed; concurrent changes are
+  blocked with a retry message rather than overwritten.
+- A recoverable backup is written outside the OpenCode configuration directory
+  under Skill Manager state (`opencode-agent-backups`, directory `0700`, backup
+  files `0600`).
+- The write is atomic (temporary file + replace) and preserves the original
+  file mode; the result is read back and verified, with automatic rollback on
+  verification failure and an explicit backup path if rollback itself fails.
+- New agents are always created with an explicit `subagent` mode; name changes
+  are key renames that block same-section and cross-generation collisions.
+- Same-name V1/V2 definitions stay non-guessing: editing requires an explicit
+  `schemaGeneration`, otherwise the request is refused.
+- Saving never applies, reloads or restarts OpenCode. The UI distinguishes
+  unsaved drafts, saved configuration, and a pending-apply note that changes
+  take effect only when OpenCode next reloads.
+
+No-op saves write nothing and create no backup. Deletion is not part of this
+slice.

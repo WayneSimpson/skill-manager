@@ -12,13 +12,46 @@ vi.mock("../api/queries", async (importOriginal) => {
   return {
     ...actual,
     useOpenCodeAgentsQuery: vi.fn(),
+    useAgentEditorContextQuery: vi.fn(),
   };
 });
 
-import { useOpenCodeAgentsQuery } from "../api/queries";
+import { useAgentEditorContextQuery, useOpenCodeAgentsQuery } from "../api/queries";
 
 const fixture: OpenCodeAgentsDto = {
   agents: [
+    {
+      name: "legacy-agent",
+      schemaGeneration: "v1",
+      description: "Declared in the legacy config file",
+      instructions: null,
+      prompt: null,
+      model: null,
+      variant: null,
+      modelRaw: null,
+      mode: "all",
+      temperature: null,
+      topP: null,
+      steps: null,
+      disabled: null,
+      hidden: null,
+      color: null,
+      permissions: null,
+      permission: null,
+      tools: null,
+      additionalOptions: {},
+      source: {
+        file: "legacy",
+        path: "/tmp/home/.opencode/opencode.jsonc",
+        format: "jsonc",
+        isWriteTarget: false,
+      },
+      editability: "config",
+      readOnlyReasons: [],
+      readOnly: false,
+      valid: true,
+      diagnostic: null,
+    },
     {
       name: "reviewer",
       schemaGeneration: "v1",
@@ -47,7 +80,7 @@ const fixture: OpenCodeAgentsDto = {
       },
       editability: "config",
       readOnlyReasons: [],
-      readOnly: true,
+      readOnly: false,
       valid: true,
       diagnostic: null,
     },
@@ -79,7 +112,7 @@ const fixture: OpenCodeAgentsDto = {
       },
       editability: "config",
       readOnlyReasons: [],
-      readOnly: true,
+      readOnly: false,
       valid: true,
       diagnostic: null,
     },
@@ -141,8 +174,25 @@ function renderPage() {
   );
 }
 
+function stubDeterministicContext(generation: "v1" | "v2" | null = "v1") {
+  vi.mocked(useAgentEditorContextQuery).mockReturnValue({
+    data: {
+      writeTarget: "/tmp/config/opencode/opencode.jsonc",
+      create: {
+        targetGeneration: generation,
+        requiresGenerationChoice: generation === null,
+      },
+      sourceHash: "hash-1",
+      readOnly: false,
+    },
+    isPending: false,
+    error: null,
+  } as unknown as ReturnType<typeof useAgentEditorContextQuery>);
+}
+
 describe("AgentsPage", () => {
   it("lists config-declared agents as read-only with their details", async () => {
+    stubDeterministicContext();
     vi.mocked(useOpenCodeAgentsQuery).mockReturnValue({
       data: fixture,
       isPending: false,
@@ -154,25 +204,39 @@ describe("AgentsPage", () => {
     expect((await screen.findAllByText("reviewer")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Reviews code").length).toBeGreaterThan(0);
     expect(screen.getByText("broken")).toBeInTheDocument();
-    // Every agent is presented read-only, with its schema generation shown.
-    expect(screen.getAllByText("Read-only").length).toBeGreaterThanOrEqual(2);
+    // Editable agents show no read-only badge; only the invalid definition does.
+    expect(screen.getAllByText("Read-only").length).toBe(1);
     expect(screen.getAllByText("V1 syntax").length).toBeGreaterThan(0);
 
-    // Canonical Instructions and first-class Reasoning/Variant are visible.
-    expect(screen.getByText("You review code.")).toBeInTheDocument();
+    // A supported legacy/non-write-target definition is editable, not read-only.
+    fireEvent.click(screen.getAllByText("legacy-agent")[0]);
+    expect((await screen.findAllByText("Declared in the legacy config file")).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /^Edit$/ })).toBeInTheDocument();
+    expect(screen.getAllByText(/editable in its declaring file/).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getAllByText("reviewer")[0]);
+    await screen.findByText("You review code.");
+
+    // Canonical Instructions and first-class Reasoning/Variant are visible
+    // for the selected reviewer agent.
+    fireEvent.click(screen.getAllByText("reviewer")[0]);
+    expect(await screen.findByText("You review code.")).toBeInTheDocument();
     expect(screen.getByText("Reasoning / Variant")).toBeInTheDocument();
     expect(screen.getAllByText("high").length).toBeGreaterThan(0);
     expect(screen.getAllByText("anthropic/claude-sonnet-4").length).toBeGreaterThan(0);
     expect(screen.getByText("subagent")).toBeInTheDocument();
     expect(screen.getByText('"high"')).toBeInTheDocument();
     expect(
-      screen.getByText(/Config-defined \(editing arrives in a later update\)/),
+      screen.getByText(/Config-defined · editable in its declaring file/),
     ).toBeInTheDocument();
+    // Editable config-defined agents expose the Edit control.
+    expect(screen.getByRole("button", { name: /Edit/ })).toBeInTheDocument();
 
     // Selecting the unsupported definition shows its read-only reason truthfully.
     fireEvent.click(screen.getByText("broken"));
     expect(await screen.findByText("Definition is not a JSON object")).toBeInTheDocument();
     expect(screen.getByText("Agent definition is not an object")).toBeInTheDocument();
+    // The unsupported definition keeps its read-only badge and no Edit control.
+    expect(screen.queryByRole("button", { name: /^Edit$/ })).not.toBeInTheDocument();
 
     // A V2 agent shows parsed base model + variant and generation badge.
     fireEvent.click(screen.getByText("v2-writer"));
@@ -202,5 +266,60 @@ describe("AgentsPage", () => {
     renderPage();
 
     await waitFor(() => expect(screen.getByText("boom")).toBeInTheDocument());
+  });
+
+  it("opens the editor directly when the create generation is deterministic", async () => {
+    stubDeterministicContext("v1");
+    vi.mocked(useOpenCodeAgentsQuery).mockReturnValue({
+      data: fixture,
+      isPending: false,
+      error: null,
+    } as unknown as ReturnType<typeof useOpenCodeAgentsQuery>);
+
+    renderPage();
+
+    fireEvent.click(await screen.findByText("New sub-agent"));
+    expect(await screen.findByText("New OpenCode sub-agent")).toBeInTheDocument();
+    expect(screen.queryByText("Choose agent syntax")).not.toBeInTheDocument();
+  });
+
+  it("requires an explicit syntax choice when both generations exist", async () => {
+    stubDeterministicContext(null);
+    vi.mocked(useOpenCodeAgentsQuery).mockReturnValue({
+      data: { ...fixture, agents: [] },
+      isPending: false,
+      error: null,
+    } as unknown as ReturnType<typeof useOpenCodeAgentsQuery>);
+
+    renderPage();
+
+    fireEvent.click(await screen.findByText("New sub-agent"));
+    expect(await screen.findByText("Choose agent syntax")).toBeInTheDocument();
+    // No editor until a generation is explicitly selected.
+    expect(screen.queryByText("New OpenCode sub-agent")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("V2 syntax (agents / system / permissions)"));
+    expect(await screen.findByText("New OpenCode sub-agent")).toBeInTheDocument();
+    expect(screen.queryByText("Choose agent syntax")).not.toBeInTheDocument();
+  });
+
+  it("supports creating on a fresh config with no agent section after an explicit choice", async () => {
+    stubDeterministicContext(null);
+    vi.mocked(useOpenCodeAgentsQuery).mockReturnValue({
+      data: { ...fixture, agents: [] },
+      isPending: false,
+      error: null,
+    } as unknown as ReturnType<typeof useOpenCodeAgentsQuery>);
+
+    renderPage();
+
+    fireEvent.click(await screen.findByText("New sub-agent"));
+    fireEvent.click(await screen.findByText("V1 syntax (agent / prompt / permission)"));
+    expect(await screen.findByText("New OpenCode sub-agent")).toBeInTheDocument();
+    // Cancellation returns to the list without an editor.
+    fireEvent.click(screen.getByText("Close"));
+    await waitFor(() =>
+      expect(screen.queryByText("New OpenCode sub-agent")).not.toBeInTheDocument(),
+    );
   });
 });

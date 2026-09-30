@@ -1,17 +1,31 @@
+import * as Dialog from "@radix-ui/react-dialog";
 import { useMemo, useState } from "react";
 
 import { ErrorBanner } from "../../../components/ErrorBanner";
 import { LoadingSpinner } from "../../../components/LoadingSpinner";
 import { PageHeader } from "../../../components/PageHeader";
+import { AgentEditorDialog } from "../components/AgentEditorDialog";
 import { useAgentsCopy } from "../i18n";
-import { useOpenCodeAgentsQuery } from "../api/queries";
+import { useOpenCodeAgentsQuery, useAgentEditorContextQuery } from "../api/queries";
 import type { OpenCodeAgentDto } from "../api/types";
+
+type EditorTarget =
+  | { kind: "create"; generation: "v1" | "v2" }
+  | { kind: "edit"; agent: OpenCodeAgentDto; generation: "v1" | "v2" | null };
+
+type CreateChoice =
+  | { kind: "direct"; generation: "v1" | "v2" }
+  | { kind: "choose" };
 
 export default function AgentsPage() {
   const query = useOpenCodeAgentsQuery();
+  const contextQuery = useAgentEditorContextQuery();
   const copy = useAgentsCopy();
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
+  const [editor, setEditor] = useState<EditorTarget | null>(null);
+  const [createChoice, setCreateChoice] = useState<CreateChoice | null>(null);
+  const [savedPending, setSavedPending] = useState<string | null>(null);
 
   const agents = query.data?.agents ?? [];
   const filtered = useMemo(() => {
@@ -35,7 +49,29 @@ export default function AgentsPage() {
   return (
     <>
       <div className="page-chrome">
-        <PageHeader title={copy.title} subtitle={copy.subtitle} />
+        <PageHeader
+          title={copy.title}
+          subtitle={copy.subtitle}
+          actions={
+            <button
+              type="button"
+              className="action-pill action-pill--md action-pill--accent"
+              disabled={contextQuery.isPending}
+              onClick={() => {
+                const create = contextQuery.data?.create;
+                if (create?.targetGeneration) {
+                  // Deterministic from the effective config: no choice needed.
+                  setEditor({ kind: "create", generation: create.targetGeneration });
+                } else {
+                  // Truly ambiguous or fresh config: explicit syntax choice.
+                  setCreateChoice({ kind: "choose" });
+                }
+              }}
+            >
+              {copy.newSubagent}
+            </button>
+          }
+        />
         {agents.length > 0 ? (
           <label className="agents-search">
             <span className="agents-search__label">{copy.searchLabel}</span>
@@ -92,7 +128,7 @@ export default function AgentsPage() {
                     <span className="agents-badge">
                       {agent.schemaGeneration === "v2" ? copy.generationV2 : copy.generationV1}
                     </span>
-                    <span className="agents-badge">{copy.readOnlyBadge}</span>
+                    {agent.readOnly ? <span className="agents-badge">{copy.readOnlyBadge}</span> : null}
                     {!agent.valid ? <span className="agents-badge agents-badge--warn">{copy.invalidBadge}</span> : null}
                   </span>
                   {agent.description ? (
@@ -104,10 +140,47 @@ export default function AgentsPage() {
             ))}
           </ul>
           {selectedAgent ? (
-            <AgentDetail agent={selectedAgent} onClose={() => setSelected(null)} />
+            <AgentDetail
+              agent={selectedAgent}
+              onClose={() => setSelected(null)}
+              onEdit={(agent) => {
+                const ambiguous = agent.readOnlyReasons.includes("defined-in-both-v1-and-v2-sections");
+                setEditor({
+                  kind: "edit",
+                  agent,
+                  generation: ambiguous ? agent.schemaGeneration : null,
+                });
+              }}
+              savedPendingApply={savedPending}
+            />
           ) : null}
         </div>
       )}
+
+      {createChoice ? (
+        <GenerationChoiceDialog
+          onChoose={(generation) => {
+            setCreateChoice(null);
+            setEditor({ kind: "create", generation });
+          }}
+          onClose={() => setCreateChoice(null)}
+        />
+      ) : null}
+
+      {editor ? (
+        <AgentEditorDialog
+          open={editor !== null}
+          mode={editor}
+          onOpenChange={(open) => {
+            if (!open) {
+              setEditor(null);
+            }
+          }}
+          onSaved={({ changed }) => {
+            setSavedPending(changed ? new Date().toISOString() : null);
+          }}
+        />
+      ) : null}
 
       {query.data ? (
         <p className="agents-limitation">
@@ -120,9 +193,20 @@ export default function AgentsPage() {
   );
 }
 
-function AgentDetail({ agent, onClose }: { agent: OpenCodeAgentDto; onClose: () => void }) {
+function AgentDetail({
+  agent,
+  onClose,
+  onEdit,
+  savedPendingApply,
+}: {
+  agent: OpenCodeAgentDto;
+  onClose: () => void;
+  onEdit: (agent: OpenCodeAgentDto) => void;
+  savedPendingApply: string | null;
+}) {
   const copy = useAgentsCopy();
   const additionalEntries = Object.entries(agent.additionalOptions ?? {});
+  const editable = agent.valid && !agent.readOnly;
 
   return (
     <aside className="agents-detail ui-scrollbar" aria-label={copy.detailTitle(agent.name)}>
@@ -132,15 +216,30 @@ function AgentDetail({ agent, onClose }: { agent: OpenCodeAgentDto; onClose: () 
           <span className="agents-badge">
             {agent.schemaGeneration === "v2" ? copy.generationV2 : copy.generationV1}
           </span>
-          <span className="agents-badge">{copy.readOnlyBadge}</span>
+          {agent.readOnly ? <span className="agents-badge">{copy.readOnlyBadge}</span> : null}
           {!agent.valid ? (
             <span className="agents-badge agents-badge--warn">{copy.invalidBadge}</span>
           ) : null}
         </div>
-        <button type="button" className="agents-detail__close" onClick={onClose}>
-          {copy.closeDetail}
-        </button>
+        <div className="agents-detail__header-actions">
+          {editable ? (
+            <button
+              type="button"
+              className="action-pill action-pill--sm"
+              onClick={() => onEdit(agent)}
+            >
+              {copy.edit}
+            </button>
+          ) : null}
+          <button type="button" className="agents-detail__close" onClick={onClose}>
+            {copy.closeDetail}
+          </button>
+        </div>
       </header>
+
+      {savedPendingApply ? (
+        <p className="agents-detail__pending" role="status">{copy.savedPendingApply}</p>
+      ) : null}
 
       {agent.diagnostic ? <p className="agents-detail__diagnostic">{agent.diagnostic}</p> : null}
 
@@ -249,4 +348,53 @@ function formatBoolean(value: boolean | null, copy: ReturnType<typeof useAgentsC
     return null;
   }
   return value ? copy.yes : copy.no;
+}
+
+function GenerationChoiceDialog({
+  onChoose,
+  onClose,
+}: {
+  onChoose: (generation: "v1" | "v2") => void;
+  onClose: () => void;
+}) {
+  const copy = useAgentsCopy();
+  return (
+    <Dialog.Root open onOpenChange={(next) => !next && onClose()}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="dialog-overlay" />
+        <Dialog.Content
+          className="dialog-content agent-editor"
+          aria-label={copy.generationChoice.title}
+        >
+          <Dialog.Description className="dialog-description agent-generation-choice__description">
+            {copy.generationChoice.description}
+          </Dialog.Description>
+          <div className="dialog-header">
+            <Dialog.Title className="dialog-title">{copy.generationChoice.title}</Dialog.Title>
+          </div>
+          <div className="agent-generation-choice__options">
+            <button
+              type="button"
+              className="btn"
+              onClick={() => onChoose("v1")}
+            >
+              {copy.generationChoice.v1}
+            </button>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => onChoose("v2")}
+            >
+              {copy.generationChoice.v2}
+            </button>
+          </div>
+          <div className="dialog-actions">
+            <button type="button" className="btn" onClick={onClose}>
+              {copy.generationChoice.cancel}
+            </button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
 }

@@ -4,10 +4,12 @@ import json
 from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
-from skill_manager.harness.resolution import ResolutionContext
 from skill_manager.jsonc import strip_jsonc
+
+if TYPE_CHECKING:
+    from skill_manager.harness.resolution import ResolutionContext
 
 
 OpenCodeConfigFormat = Literal["json", "jsonc"]
