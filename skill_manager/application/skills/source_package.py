@@ -16,6 +16,7 @@ MAX_DIRECTORY_ENTRIES = 1000
 MAX_ANCESTORS = 8
 
 AGENT_PLUGIN_SCHEMA = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json"
+AGENT_PLUGIN_SCHEMA_PREFIX = "https://agent-plugins.org/schemas/"
 MCP_SCHEMA = "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json"
 _STANDARD_MANIFEST = "plugin.json"
 _VENDOR_MANIFESTS = (
@@ -46,6 +47,13 @@ class _RootParse:
     manifests: list[dict[str, str]]
     parsed: list[_ParsedManifest]
     diagnostics: list[str]
+
+
+@dataclass(frozen=True)
+class CodexManifestSelection:
+    path: Path | None
+    status: str
+    name: str | None = None
 
 
 class SourcePackageDiscovery:
@@ -712,6 +720,37 @@ def _read_json(path: Path, root: Path) -> tuple[object | None, str | None]:
             return None, "JSON nesting exceeds parser limits"
     except (OSError, RuntimeError, ValueError):
         return None, "manifest is unreadable"
+
+
+def select_codex_manifest(root: Path) -> CodexManifestSelection:
+    """Select Codex's effective manifest using its root schema precedence rules."""
+    root = Path(root)
+    for relative in (_STANDARD_MANIFEST, '.codex-plugin/plugin.json'):
+        path = root / relative
+        try:
+            # Native identity must not come through any filesystem link.
+            if any(p.is_symlink() for p in (path, *path.parents)) or any(
+                p.exists() and not p.is_dir() for p in path.parents
+            ):
+                return CodexManifestSelection(None, 'blocked')
+            if not path.exists():
+                continue
+            value, error = _read_json(path, root)
+        except (OSError, RuntimeError):
+            return CodexManifestSelection(None, 'blocked')
+        if error:
+            if relative == _STANDARD_MANIFEST and error == 'invalid JSON':
+                continue  # Codex ignores a root document that is not an Agent Plugins manifest.
+            return CodexManifestSelection(None, 'blocked')
+        name = value.get('name') if isinstance(value, dict) else None
+        name = name if isinstance(name, str) and name else None
+        if relative != _STANDARD_MANIFEST:
+            return CodexManifestSelection(path, 'legacy', name)
+        schema = value.get('$schema') if isinstance(value, dict) else None
+        if isinstance(schema, str) and schema.startswith(AGENT_PLUGIN_SCHEMA_PREFIX):
+            status = 'supported' if schema == AGENT_PLUGIN_SCHEMA else 'unsupported'
+            return CodexManifestSelection(path, status, name)
+    return CodexManifestSelection(None, 'missing')
 
 
 def _skill_children(directory: Path, root: Path, diagnostics: list[str], *, recursive: bool = False) -> list[Path]:

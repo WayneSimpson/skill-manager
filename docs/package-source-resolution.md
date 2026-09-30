@@ -74,6 +74,10 @@ are not harness executable-version gates.
    `node_modules` package path and agree with its version. Git locks require a full
    GitHub commit; public npm locks require a matching registry artifact URL and
    SHA-512 integrity. Exact existing `npm:name@version` coordinates also work.
+   Pinned `git+ssh://git@github.com/owner/repo.git#<40-hex-commit>` locks are
+   canonicalised to the same GitHub source as Git HTTPS locks. This is notation
+   support only: acquisition uses HTTPS, never SSH or credentials. Other hosts,
+   users, ports, passwords, query strings and missing/non-exact pins are rejected.
    Registry response and extracted package names/versions must match, and the
    tarball bytes must pass integrity verification. Package name/version alone in
    an arbitrary local directory does not establish registry installation.
@@ -97,6 +101,13 @@ selected, unrelated repository siblings are discarded before returning the artif
 An arbitrary repository root without a package manifest is not substituted when
 membership fails.
 
+Archive-internal relative file/directory aliases are materialised as ordinary
+content from archive members, never by following host links. Expansion happens
+in private acquisition scratch space. Its temporary alias map must also pass
+selected-package containment before a snapshot is returned or captured: an alias
+into a monorepo sibling is rejected even if it stayed inside the archive wrapper.
+The map is not persisted as another source model.
+
 npm acquisition downloads the exact version's published tarball, not an invented
 Git tag. When registry `repository` metadata is present, its repository/directory
 is retained as an explicit distribution-to-source relationship. Only a valid
@@ -117,9 +128,13 @@ repository links are unscoped and do not automatically supply it.
 - Downloads: 32 MiB, 10-second socket timeout, checked 30-second elapsed limit;
   JSON metadata: 1 MiB. Archive expansion: 100 MiB, 10,000 entries and 64 path levels.
 - Archives require one wrapper directory. Reject traversal, drive/absolute paths,
-  backslashes, duplicates, links, special files and malformed archives. Failed
-  extraction is removed. Retain ordinary supporting files and executable bits
-  without executing anything.
+  backslashes, duplicate outputs, special files and malformed archives. Relative
+  aliases require existing, non-excluded targets; cycles, escapes and collisions
+  fail. Expanded count/size/depth and alias-chain limits apply before output is
+  written. Failed extraction is removed; executable file bits are preserved.
+  No filesystem symlinks are created and no package code is executed.
+  Parent traversal through another alias is rejected rather than guessed, as is
+  traversal through a missing or excluded directory.
 - Exclude `.git`, `node_modules`, caches, common credential/config directories,
   `.env*`, `.npmrc`, `.pypirc`, `.netrc`, `.pem` and `.key` files. Content comes
   from upstream, never a recursive copy of arbitrary machine state. This is not
@@ -133,6 +148,18 @@ repository links are unscoped and do not automatically supply it.
   repository provenance work without Skill Manager marketplace registration.
 - Acquired snapshots use explicit-root inspection and an acquisition boundary.
   Existing manifest/component parsers are reused without duplication.
+
+An OpenCode sighting with an exact matching native Git pin or npm integrity proof
+is retained as `opencode_package_observation` evidence for the acquired snapshot.
+It is issued during that resolution, so a later unpinned OpenCode sighting cannot
+borrow another harness's installation proof. Neither an origin label nor a cache
+directory name creates this evidence. It establishes intent, not deployment
+ownership or runtime success.
+
+Failures use a fixed stage and allowlisted cause where available (for example,
+provenance / exact Git revision required, or package boundary / alias crosses
+selected package boundary). Raw exceptions, URLs, paths and secret values are
+not inserted into the reason shown by the API.
 
 ## Verified references
 

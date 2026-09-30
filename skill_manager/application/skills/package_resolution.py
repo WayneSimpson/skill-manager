@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import base64
 import configparser
-from dataclasses import dataclass, field, replace
+from dataclasses import asdict, dataclass, field, replace
 import hashlib
 import json
 from pathlib import Path
@@ -15,7 +15,7 @@ from typing import Literal
 from urllib.parse import quote, urlsplit
 
 from skill_manager.sources.artifacts import (
-    extract_source, public_url, read_public_bytes, read_public_json, relative_path,
+    extract_source, public_url, read_public_bytes, read_public_json, relative_path, validate_alias_boundary,
 )
 from skill_manager.sources import github_repo_from_locator
 from skill_manager.sources.github import matching_skill_roots
@@ -101,7 +101,19 @@ def _repository(value: object) -> PackageSource:
         value = value.get('url')
     if not isinstance(value, str):
         raise ValueError('Repository declaration is missing')
-    raw = value.removeprefix('git+')
+    git_ssh = value.startswith('git+ssh://')
+    if git_ssh:
+        parsed = urlsplit(value.removeprefix('git+'))
+        if (parsed.scheme != 'ssh' or parsed.netloc != 'git@github.com' or '?' in value or
+                any(ord(c) < 33 for c in value)):
+            raise ValueError('Repository host or URL is unsupported')
+        if not re.fullmatch(r'[a-f0-9]{40}', parsed.fragment):
+            raise ValueError('Native Git lock missing exact revision')
+        raw = 'https://github.com' + parsed.path
+        ref = parsed.fragment
+    else:
+        raw = value.removeprefix('git+')
+        ref = None
     if raw.startswith('github:'):
         raw = 'https://github.com/' + raw[7:]
     if raw.startswith('git@github.com:'):
@@ -113,8 +125,71 @@ def _repository(value: object) -> PackageSource:
     repo = parsed.path.removeprefix('/').removesuffix('.git')
     if not re.fullmatch(r'[A-Za-z0-9_-][A-Za-z0-9_.-]*/[A-Za-z0-9_-][A-Za-z0-9_.-]*', repo):
         raise ValueError('Invalid repository identity')
-    return PackageSource('github', 'github:' + repo, ref=parsed.fragment or None,
+    return PackageSource('github', 'github:' + repo, ref=ref or parsed.fragment or None,
                          package_path=relative_path(directory) if directory is not None else None)
+
+
+_SAFE_FAILURE_CAUSES = {
+    'Repository host or URL is unsupported': 'unsupported repository URL',
+    'Invalid repository identity': 'invalid repository identity',
+    'Native Git lock missing exact revision': 'exact Git revision required',
+    'Alias crosses selected package boundary': 'alias crosses selected package boundary',
+    'Unsafe source link target': 'unsafe archive alias target',
+    'Source link target escapes archive wrapper': 'archive alias escapes source boundary',
+    'Source link target is excluded': 'archive alias targets excluded content',
+    'Source link target is missing': 'archive alias target is missing',
+    'Cyclic source link': 'cyclic archive alias',
+    'Source link parent traversal crosses an alias': 'ambiguous archive alias parent traversal',
+    'Source alias chain limit exceeded': 'archive alias chain limit exceeded',
+    'Source archive contains an output type collision': 'archive output collision',
+    'Duplicate source path': 'duplicate archive path',
+    'Source archive contains a link or special file': 'unsupported archive entry type',
+    'Source archive limit exceeded': 'archive limit exceeded',
+    'Expanded source file limit exceeded': 'expanded archive limit exceeded',
+    'Expanded source archive limit exceeded': 'expanded archive limit exceeded',
+    'Expanded source path depth limit exceeded': 'expanded archive depth exceeded',
+    'Source archive could not be extracted safely': 'archive validation failed',
+}
+
+
+def _safe_failure_reason(stage: str, error: Exception) -> str:
+    cause = None
+    for _ in range(8):
+        cause = _SAFE_FAILURE_CAUSES.get(str(error), cause)
+        if error.__cause__ is None:
+            break
+        error = error.__cause__
+    return f'Source resolution failed during {stage}' + (f': {cause}' if cause else '') + '.'
+
+
+def _pinned_installation_source(kind: str, proof: dict, source: dict) -> bool:
+    if (proof.get('kind') != source.get('kind') or proof.get('locator') != source.get('locator')
+            or (proof.get('package_path') or '.') != (source.get('package_path') or '.')):
+        return False
+    if source['kind'] == 'github' and kind in ('git_origin_commit', 'npm_lock_git'):
+        return bool(re.fullmatch(r'[a-f0-9]{40}', proof.get('revision') or '')
+                    and proof['revision'] == source.get('revision'))
+    return (source['kind'] == 'npm' and kind == 'npm_lock' and bool(proof.get('integrity'))
+            and proof['integrity'] == source.get('integrity')
+            and bool(proof.get('version')) and proof['version'] == source.get('version'))
+
+
+def _observed_opencode_package(entry: InventoryEntry, source: PackageSource, evidence: tuple, local: Path | None) -> bool:
+    if local is None or not any(_pinned_installation_source(item.kind, asdict(item.source), asdict(source))
+                                for item in evidence):
+        return False
+    paths = {Path(entry.source_path)} if entry.source_path else {s.path for s in entry.sightings if s.path is not None}
+    if len(paths) != 1:
+        return False
+    observed = paths.pop()
+    try:
+        return observed.is_absolute() and any(
+            sighting.kind == 'harness' and sighting.harness == 'opencode' and sighting.path is not None
+            and sighting.path.resolve(strict=True) == observed.resolve(strict=True)
+            for sighting in entry.sightings
+        )
+    except (OSError, RuntimeError, ValueError):
+        return False
 
 
 def _npm(name: str, version: str, *, integrity: str | None = None) -> PackageSource:
@@ -167,6 +242,7 @@ class PackageSourceResolver:
         """Artifacts survive until caller removes work_dir. Failure removes only our own scratch directory."""
         result = PackageResolution('unresolved', entry.skill_ref)
         scratch = None
+        stage = 'provenance'
         try:
             if authoritative_source is not None:
                 if not authoritative_source.revision:
@@ -178,6 +254,7 @@ class PackageSourceResolver:
             if not evidence:
                 result.reason = 'No deterministic upstream source evidence; names are not source authority.'
                 return result
+            stage = 'source selection'
             source = self._choose(evidence)
             if source is None:
                 result.status = 'ambiguous'
@@ -185,23 +262,31 @@ class PackageSourceResolver:
                 return result
             result.source = source
             result.relationship = 'declared upstream of observed skill; external installation remains unowned'
+            stage = 'workspace validation'
             workspace = work_dir.resolve(strict=True)
             if (not workspace.is_dir() or work_dir.is_symlink() or
                     (local is not None and (workspace.is_relative_to(local) or local.is_relative_to(workspace)))):
                 raise ValueError('Workspace must be separate from observation')
             scratch = Path(mkdtemp(prefix='package-source-', dir=workspace))
             result.status = 'unavailable'
+            stage = 'source acquisition'
             if source.kind == 'npm':
                 root, source, links = self._acquire_npm(source, scratch)
                 result.distributions = links
+                stage = 'package inspection'
                 package = SourcePackageDiscovery().inspect_root(root)['package']
             else:
+                aliases = {}
                 checkout, revision = self.fetcher.acquire_repository(
                     source_locator=source.locator, work_dir=scratch, ref=source.revision or source.ref,
+                    alias_targets=aliases,
                 )
                 source = replace(source, revision=revision)
                 result.source = source
+                stage = 'package boundary'
                 root, package, skill_path = self._package_boundary(checkout, source)
+                # Expansion is private until every alias stays within the retained package.
+                validate_alias_boundary(aliases, root.relative_to(checkout))
                 source = replace(source, package_path=root.relative_to(checkout).as_posix(), skill_path=skill_path)
                 if root != checkout:
                     # Retain just the authored package, not siblings in a monorepo.
@@ -209,10 +294,14 @@ class PackageSourceResolver:
                     root.rename(target)
                     shutil.rmtree(checkout)
                     root = target
+                    stage = 'package inspection'
                     package = SourcePackageDiscovery().inspect_root(root)['package']
             result.source = source
             result.artifact_root = root
             result.capabilities = package
+            if _observed_opencode_package(entry, source, result.evidence, local):
+                result.evidence += (SourceEvidence('opencode_package_observation',
+                    'OpenCode inventory with pinned installation provenance', source),)
             if package is None:
                 result.limitations.append('Source acquired, but no supported package capability manifest at its root.')
             result.status = 'resolved'
@@ -220,9 +309,8 @@ class PackageSourceResolver:
         except _AmbiguousBoundary:
             result.status = 'ambiguous'
             result.reason = 'Upstream package or skill boundary is ambiguous.'
-        except (OSError, ValueError, RuntimeError, configparser.Error):
-            result.reason = ('Source is inaccessible, invalid or outside supported safety boundaries; '
-                             'no credentials were requested and no local installation was changed.')
+        except (OSError, ValueError, RuntimeError, configparser.Error) as error:
+            result.reason = _safe_failure_reason(stage, error)
         finally:
             if scratch is not None and result.status != 'resolved':
                 shutil.rmtree(scratch)
@@ -258,7 +346,10 @@ class PackageSourceResolver:
         if entry.source.kind == 'npm':
             name, version = entry.source.locator.removeprefix('npm:').rsplit('@', 1)
             evidence.append(SourceEvidence('native_coordinate', 'inventory.source', _npm(name, version)))
-            return evidence, None
+            if (entry.source_path and not Path(entry.source_path).is_absolute()) or (
+                entry.source_path is None and not any(s.path for s in entry.sightings)
+            ):
+                return evidence, None
         paths = {Path(entry.source_path)} if entry.source_path else {
             s.path for s in entry.sightings if s.path is not None
         }
@@ -278,7 +369,7 @@ class PackageSourceResolver:
         if not skill.is_dir() or not (skill / 'SKILL.md').exists():
             return [], skill
         manifest = parse_skill_manifest_text(_text(skill / 'SKILL.md', skill))
-        if manifest.source_kind == 'github' and manifest.source_locator:
+        if entry.source.kind != 'npm' and manifest.source_kind == 'github' and manifest.source_locator:
             evidence.append(SourceEvidence('skill_frontmatter', 'SKILL.md',
                                           _github_locator(manifest.source_locator, entry.source_ref)))
         current = skill
@@ -293,7 +384,9 @@ class PackageSourceResolver:
                 package_root = current
                 locked = self._locked_package(current)
                 if locked:
-                    return [locked], skill
+                    return ([*evidence, locked] if entry.source.kind == 'npm' else [locked]), skill
+                if entry.source.kind == 'npm':
+                    return evidence, None  # Coordinate alone does not prove native installation intent.
                 membership = SourcePackageDiscovery(stop_paths=self.stop_paths).resolve(skill)['package']
                 for path in present:
                     data = _json(path, current)
@@ -305,6 +398,8 @@ class PackageSourceResolver:
                         source = _repository(data['repository'])
                         evidence.append(SourceEvidence('package_repository', str(path.relative_to(current)), source))
             if (current / '.git').exists():
+                if entry.source.kind == 'npm':
+                    return evidence, None
                 git = current / '.git'
                 if not git.is_dir() or git.is_symlink():
                     raise ValueError('Linked Git metadata unsupported')
@@ -362,7 +457,7 @@ class PackageSourceResolver:
             resolved = record.get('resolved', '')
             if not isinstance(resolved, str):
                 raise ValueError('Invalid native artifact locator')
-            if resolved.startswith(('git+https://github.com/', 'https://github.com/')):
+            if resolved.startswith(('git+https://github.com/', 'https://github.com/', 'git+ssh://')):
                 source = _repository(resolved)
                 if not source.ref or not re.fullmatch(r'[a-f0-9]{40}', source.ref):
                     raise ValueError('Native Git lock missing exact revision')

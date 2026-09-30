@@ -64,7 +64,8 @@ A multi-harness package such as n8n's skills can illustrate co-located manifests
 shared Skills and wider hook content; no package-name-specific rule is used.
 OpenCode runtime provenance plus `package.json.main` alone does **not** establish a
 portable capability contract. The separate [OpenCode native planner](native-package-strategies.md#opencode-native-contract)
-checks a declared server export, or `main` with explicit OpenCode distribution evidence.
+checks a declared server export, or `main` with explicit OpenCode distribution
+or exactly pinned observation evidence.
 It does not add an OpenCode parser to this structural layer.
 Legacy command migration, marketplace metadata overlays and
 unimplemented client extensions are not reproduced. Vendor skill discovery is

@@ -214,6 +214,13 @@ class ManagedPackageStore:
                 if old is not None:
                     # Associating another skill must not erase a known newer-source warning.
                     captured = deepcopy(old)
+                    # A newly verified sighting can establish native intent for this same snapshot.
+                    if any(item.kind == 'opencode_package_observation' for item in resolution.evidence):
+                        for item in resolution.evidence:
+                            proof = asdict(item)
+                            if (item.kind in ('opencode_package_observation', 'git_origin_commit', 'npm_lock_git', 'npm_lock')
+                                    and proof not in captured['evidence']):
+                                captured['evidence'].append(proof)
                     if old['fingerprint'] is None:
                         captured['fingerprint'] = fingerprint
                         captured['capabilities'] = _capabilities(resolution.capabilities)

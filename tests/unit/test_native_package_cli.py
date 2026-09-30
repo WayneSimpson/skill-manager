@@ -85,6 +85,20 @@ def markets(plan, present=True):
         'marketplaceSource': {'sourceType': 'local', 'source': plan.surface['path']}}] if present else []}
 
 
+def codex_entry(name: str, marketplace: str, source_path: Path | None = None) -> dict:
+    return {
+        'pluginId': name + '@' + marketplace,
+        'name': name,
+        'marketplaceName': marketplace,
+        'version': '1.0.0',
+        'installed': True,
+        'enabled': True,
+        'source': {'source': 'local', 'path': str(source_path or Path('/tmp/source'))},
+        'installPolicy': 'AVAILABLE',
+        'authPolicy': 'ON_INSTALL',
+    }
+
+
 class NativePackageCLITests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = TemporaryDirectory()
@@ -123,7 +137,8 @@ class NativePackageCLITests(unittest.TestCase):
         plan = codex_plan(self.root)
         cache = self.root / 'plugins/cache' / plan.surface['marketplaceId'] / 'example/1.0.0'
         cache.mkdir(parents=True)
-        (cache / 'plugin.json').write_text('{"name":"example"}')
+        (cache / '.codex-plugin').mkdir()
+        (cache / '.codex-plugin/plugin.json').write_text('{"name":"example"}')
         entry = {'pluginId':plan.surface['nativeId'], 'name':'example',
             'marketplaceName':plan.surface['marketplaceId'], 'version':'1.0.0', 'installed':True,
             'enabled':True, 'installPolicy':'AVAILABLE', 'authPolicy':'ON_INSTALL',
@@ -257,7 +272,8 @@ class NativePackageCLITests(unittest.TestCase):
         plan = codex_plan(self.root)
         cache = self.root / "plugins/cache" / plan.surface["marketplaceId"] / "example" / "1.0.0"
         cache.mkdir(parents=True)
-        (cache / "plugin.json").write_text('{"name":"example"}', encoding="utf-8")
+        (cache / ".codex-plugin").mkdir()
+        (cache / ".codex-plugin/plugin.json").write_text('{"name":"example"}', encoding="utf-8")
         declared = Path(plan.surface['wholePackagePath'])
         declared.mkdir(parents=True)
         (declared / 'plugin.json').write_text('{"name":"example"}')
@@ -286,6 +302,83 @@ class NativePackageCLITests(unittest.TestCase):
         self.assertEqual(target.registrations[0].root, declared)
         self.assertIsNone(target.registrations[0].deployment_id)
 
+    def test_codex_cache_identity_uses_valid_overlay_when_root_is_unrelated(self):
+        self.root.mkdir()
+        marketplace = 'marketplace'
+        cache = self.root / 'plugins/cache' / marketplace / 'chosen' / '1.0.0'
+        (cache / '.codex-plugin').mkdir(parents=True)
+        (cache / 'plugin.json').write_text('{"name":"registry-name"}', encoding='utf-8')
+        (cache / '.codex-plugin/plugin.json').write_text('{"name":"chosen"}', encoding='utf-8')
+        adapter = CodexNativePackageAdapter(self.root, lambda argv: None)
+        entry = adapter._parse_entries([codex_entry('chosen', marketplace, cache)], installed_section=True)[0]
+
+        self.assertEqual(adapter._installed_root(entry), cache)
+        self.assertTrue(adapter._source_path_matches(entry, cache))
+
+    def test_codex_cache_identity_ignores_malformed_root_before_overlay(self):
+        self.root.mkdir()
+        marketplace = 'marketplace'
+        cache = self.root / 'plugins/cache' / marketplace / 'chosen' / '1.0.0'
+        (cache / '.codex-plugin').mkdir(parents=True)
+        (cache / 'plugin.json').write_text('{malformed', encoding='utf-8')
+        (cache / '.codex-plugin/plugin.json').write_text('{"name":"chosen"}', encoding='utf-8')
+        adapter = CodexNativePackageAdapter(self.root, lambda argv: None)
+        entry = adapter._parse_entries([codex_entry('chosen', marketplace, cache)], installed_section=True)[0]
+
+        self.assertEqual(adapter._installed_root(entry), cache)
+
+    def test_codex_cache_identity_does_not_fallback_from_unsupported_root_schema(self):
+        self.root.mkdir()
+        marketplace = 'marketplace'
+        cache = self.root / 'plugins/cache' / marketplace / 'chosen' / '1.0.0'
+        (cache / '.codex-plugin').mkdir(parents=True)
+        (cache / 'plugin.json').write_text(json.dumps({
+            '$schema': 'https://agent-plugins.org/schemas/2.0.0/plugin.schema.json',
+            'name': 'chosen',
+        }), encoding='utf-8')
+        (cache / '.codex-plugin/plugin.json').write_text('{"name":"chosen"}', encoding='utf-8')
+        adapter = CodexNativePackageAdapter(self.root, lambda argv: None)
+        entry = adapter._parse_entries([codex_entry('chosen', marketplace, cache)], installed_section=True)[0]
+
+        self.assertIsNone(adapter._installed_root(entry))
+        self.assertFalse(adapter._source_path_matches(entry, cache))
+
+    def test_codex_cache_identity_keeps_supported_root_precedence(self):
+        self.root.mkdir()
+        marketplace = 'marketplace'
+        cache = self.root / 'plugins/cache' / marketplace / 'root-name' / '1.0.0'
+        (cache / '.codex-plugin').mkdir(parents=True)
+        (cache / 'plugin.json').write_text(json.dumps({
+            '$schema': 'https://agent-plugins.org/schemas/1.0.0/plugin.schema.json',
+            'name': 'root-name',
+        }), encoding='utf-8')
+        (cache / '.codex-plugin/plugin.json').write_text('{"name":"overlay-name"}', encoding='utf-8')
+        adapter = CodexNativePackageAdapter(self.root, lambda argv: None)
+        entry = adapter._parse_entries([codex_entry('root-name', marketplace, cache)], installed_section=True)[0]
+
+        self.assertEqual(adapter._installed_root(entry), cache)
+        self.assertTrue(adapter._source_path_matches(entry, cache))
+
+    def test_codex_cache_identity_blocks_nonregular_or_symlinked_root_manifest(self):
+        self.root.mkdir()
+        marketplace = 'marketplace'
+        for kind in ('directory', 'symlink'):
+            with self.subTest(kind=kind):
+                cache = self.root / 'plugins/cache' / marketplace / kind / '1.0.0'
+                (cache / '.codex-plugin').mkdir(parents=True)
+                (cache / '.codex-plugin/plugin.json').write_text('{"name":"chosen"}', encoding='utf-8')
+                root_manifest = cache / 'plugin.json'
+                if kind == 'directory':
+                    root_manifest.mkdir()
+                else:
+                    target = cache / 'other.json'
+                    target.write_text('{"name":"chosen"}', encoding='utf-8')
+                    root_manifest.symlink_to(target)
+                adapter = CodexNativePackageAdapter(self.root, lambda argv: None)
+                entry = adapter._parse_entries([codex_entry(kind, marketplace, cache)], installed_section=True)[0]
+
+                self.assertIsNone(adapter._installed_root(entry))
+
     def test_codex_verify_requires_marketplace_source_and_real_cache_provenance(self) -> None:
         plan = codex_plan(self.root)
         marketplace_root = Path(plan.surface["path"])
@@ -297,7 +390,8 @@ class NativePackageCLITests(unittest.TestCase):
         catalog.write_text(json.dumps(plan.surface["marketplaceDocument"]), encoding="utf-8")
         cache = self.root / "plugins/cache" / plan.surface["marketplaceId"] / "example" / "1.0.0"
         cache.mkdir(parents=True)
-        (cache / "plugin.json").write_text('{"name":"example"}', encoding="utf-8")
+        (cache / ".codex-plugin").mkdir()
+        (cache / ".codex-plugin/plugin.json").write_text('{"name":"example"}', encoding="utf-8")
         payload = {
             "installed": [{
                 "pluginId": plan.surface["nativeId"], "name": "example",
@@ -316,7 +410,7 @@ class NativePackageCLITests(unittest.TestCase):
         self.assertFalse(verified["enabled"])
         self.assertEqual(verified["path"], str(cache))
 
-        (cache / "plugin.json").write_text('{"name":"different"}', encoding="utf-8")
+        (cache / ".codex-plugin/plugin.json").write_text('{"name":"different"}', encoding="utf-8")
         self.assertFalse(adapter.verify(plan, "present")["verified"])
 
     def test_codex_install_uses_task06_argv_without_reconstructing_the_marketplace(self) -> None:
@@ -353,7 +447,8 @@ class NativePackageCLITests(unittest.TestCase):
                 installed = True
                 cache = self.root / "plugins/cache" / plan.surface["marketplaceId"] / "example" / "1.0.0"
                 cache.mkdir(parents=True)
-                (cache / "plugin.json").write_text('{"name":"example"}', encoding="utf-8")
+                (cache / ".codex-plugin").mkdir()
+                (cache / ".codex-plugin/plugin.json").write_text('{"name":"example"}', encoding="utf-8")
             return completed(argv, "{}")
 
         result = CodexNativePackageAdapter(self.root, runner, mechanism_available=True).install(plan)
@@ -392,7 +487,8 @@ class NativePackageCLITests(unittest.TestCase):
         catalog.write_text(json.dumps(plan.surface["marketplaceDocument"]), encoding="utf-8")
         cache = self.root / "plugins/cache" / plan.surface["marketplaceId"] / "example" / "1.0.0"
         cache.mkdir(parents=True)
-        (cache / "plugin.json").write_text('{"name":"example"}', encoding="utf-8")
+        (cache / ".codex-plugin").mkdir()
+        (cache / ".codex-plugin/plugin.json").write_text('{"name":"example"}', encoding="utf-8")
         calls: list[list[str]] = []
         installed = True
         marketplace_present = True

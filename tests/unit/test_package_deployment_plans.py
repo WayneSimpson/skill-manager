@@ -7,7 +7,7 @@ import shutil
 from unittest.mock import patch
 
 from skill_manager.application.skills.managed_packages import ManagedPackageStore
-from skill_manager.application.skills.package_resolution import PackageResolution, PackageSource, DistributionRelationship
+from skill_manager.application.skills.package_resolution import PackageResolution, PackageSource, DistributionRelationship, SourceEvidence
 from skill_manager.application.skills.source_package import SourcePackageDiscovery
 from skill_manager.application.skills.package_deployment import (
     NativeRegistration, NativeTarget, PackageDeploymentPlanner, opencode_isolation, read_opencode_registrations,
@@ -40,6 +40,25 @@ class PackageDeploymentPlanTests(unittest.TestCase):
         return NativeTarget(harness, self.root / 'native' / harness,
                             inventory_complete=True, mechanism_available=True)
 
+    def manifest_record(self, root_manifest, codex_name='codex-overlay', *, cursor_name=None, label='variant'):
+        artifact = self.root / label
+        artifact.mkdir()
+        if root_manifest is not None:
+            if root_manifest == 'directory':
+                (artifact / 'plugin.json').mkdir()
+            else:
+                (artifact / 'plugin.json').write_text(root_manifest)
+        (artifact / '.codex-plugin').mkdir()
+        (artifact / '.codex-plugin/plugin.json').write_text(json.dumps({'name': codex_name}))
+        if cursor_name is not None:
+            (artifact / '.cursor-plugin').mkdir()
+            (artifact / '.cursor-plugin/plugin.json').write_text(json.dumps({'name': cursor_name}))
+        source = replace(self.resolution.source, locator='github:example/' + label)
+        resolution = PackageResolution(
+            'resolved', label, source=source, artifact_root=artifact,
+            capabilities=SourcePackageDiscovery().inspect_root(artifact)['package'])
+        return self.store.adopt(resolution, name=label, observations=[])
+
     def test_cross_harness_whole_package_strategies(self):
         expected = {'claude': 'native-local', 'cursor': 'native-local', 'codex': 'native-install'}
         for harness, strategy in expected.items():
@@ -50,6 +69,89 @@ class PackageDeploymentPlanTests(unittest.TestCase):
                 self.assertEqual(plan.ownership, 'absent')
                 self.assertTrue(plan.actions)
                 self.assertTrue(all(action['unit'] == 'whole-package' for action in plan.actions))
+
+    def observed_main_record(self, label, *, harness='opencode', proof_source=None, proof_kind='git_origin_commit', observed=True, source=None, intent=True):
+        artifact = self.root / label
+        shutil.copytree(self.resolution.artifact_root, artifact)
+        (artifact / 'package.json').write_text('{"name":"example","main":"./server.js"}')
+        source = source or replace(self.resolution.source, locator='github:example/' + label)
+        evidence = (SourceEvidence(proof_kind, 'exact installation metadata', proof_source or source),)
+        if intent:
+            evidence += (SourceEvidence('opencode_package_observation', 'verified observation fixture', source),)
+        resolution = replace(self.resolution, source=source, artifact_root=artifact, evidence=evidence)
+        observations = [{'harness': harness, 'path': str(self.root / 'removed-observation' / label),
+                         'ownership': 'external-existing'}] if observed else []
+        return self.store.adopt(resolution, name=label, observations=observations)
+
+    def test_exact_observed_opencode_source_allows_main_after_store_reload(self):
+        record = self.observed_main_record('observed')
+        reloaded = PackageDeploymentPlanner(ManagedPackageStore(self.store.root))
+        plan = reloaded.plan(record['id'], self.target('opencode'))
+        self.assertEqual(plan.support, 'supported', plan.blockers)
+        self.assertEqual(plan.strategy, 'native-install')
+        self.assertEqual(plan.surface['packageSpec'], Path(plan.surface['path']).as_uri())
+
+    def test_main_intent_requires_matching_pinned_source_and_actual_harness_observation(self):
+        for label, kwargs in (
+            ('generic', {'observed': False}),
+            ('other-harness', {'harness': 'claude'}),
+            ('unpinned', {'proof_kind': 'package_repository'}),
+            ('wrong-kind', {'proof_kind': 'npm_lock'}),
+            ('other-revision', {'proof_source': replace(self.resolution.source, locator='github:example/other-revision', revision='b'*40)}),
+            ('other-source', {'proof_source': replace(self.resolution.source, locator='github:unrelated/package')}),
+        ):
+            with self.subTest(label=label):
+                record = self.observed_main_record(label, **kwargs)
+                plan = self.planner.plan(record['id'], self.target('opencode'))
+                self.assertEqual(plan.strategy, 'manual/unsupported')
+                self.assertFalse(plan.actions)
+
+    def test_observed_npm_intent_requires_native_lock_with_matching_integrity(self):
+        integrity = 'sha512-' + 'A'*86 + '=='
+        for label, kind, lock_integrity, allowed in (
+            ('npm-proven', 'npm_lock', integrity, True),
+            ('npm-wrong-kind', 'git_origin_commit', integrity, False),
+            ('npm-missing-integrity', 'npm_lock', None, False),
+            ('npm-wrong-integrity', 'npm_lock', 'sha512-' + 'B'*86 + '==', False),
+        ):
+            with self.subTest(label=label):
+                source = PackageSource('npm', 'npm:' + label + '@1.0.0', revision=integrity,
+                                       version='1.0.0', integrity=integrity)
+                proof = replace(source, revision=None, integrity=lock_integrity)
+                record = self.observed_main_record(label, source=source, proof_source=proof, proof_kind=kind)
+                plan = self.planner.plan(record['id'], self.target('opencode'))
+                self.assertEqual(plan.support == 'supported', allowed, plan.blockers)
+
+    def test_observed_opencode_intent_does_not_override_drift_or_pending_candidate(self):
+        record = self.observed_main_record('locked-git-proof', proof_kind='npm_lock_git')
+        self.assertEqual(self.planner.plan(record['id'], self.target('opencode')).support, 'supported')
+        (Path(record['artifactRoot']) / 'server.js').write_text('changed after capture')
+        self.assertFalse(self.planner.plan(record['id'], self.target('opencode')).actions)
+        pending = self.observed_main_record('pending-proof')
+        resolution = replace(self.resolution, source=replace(PackageSource(**pending['source']), revision='b'*40))
+        self.store.record_refresh(pending['id'], resolution)
+        self.assertFalse(self.planner.plan(pending['id'], self.target('opencode')).actions)
+
+    def test_opencode_observation_cannot_borrow_another_harness_pin(self):
+        record = self.observed_main_record('cross-sighting', harness='claude', intent=False)
+        source = PackageSource(**record['source'])
+        weak = replace(self.resolution, source=source, artifact_root=self.root / 'cross-sighting',
+                       evidence=(SourceEvidence('package_repository', 'package.json', replace(source, revision=None)),))
+        self.store.adopt(weak, name='cross-sighting', observations=[{
+            'harness': 'opencode', 'ownership': 'external-existing',
+            'path': str(self.root / 'removed-unpinned-observation'),
+        }])
+        plan = self.planner.plan(record['id'], self.target('opencode'))
+        self.assertEqual(plan.strategy, 'manual/unsupported')
+        self.assertFalse(plan.actions)
+
+    def test_observed_intent_never_takes_over_existing_external_registration(self):
+        record = self.observed_main_record('external-proof')
+        target = replace(self.target('opencode'), registrations=(
+            NativeRegistration('external', 'native-source', PackageSource(**record['source'])),))
+        plan = self.planner.plan(record['id'], target)
+        self.assertEqual(plan.ownership, 'external-existing')
+        self.assertFalse(plan.actions)
 
     def test_changed_artifact_blocks_all_actions(self):
         (Path(self.record['artifactRoot']) / 'new-file').write_text('changed')
@@ -361,10 +463,69 @@ class PackageDeploymentPlanTests(unittest.TestCase):
 
     def test_invalid_standard_manifest_is_not_hidden_by_valid_vendor_manifest(self):
         root = self.resolution.artifact_root
-        (root / 'plugin.json').write_text('{"name":"invalid-standard"}')
+        (root / 'plugin.json').write_text(json.dumps({
+            '$schema': 'https://agent-plugins.org/schemas/2.0.0/plugin.schema.json',
+            'name': 'invalid-standard',
+        }))
         record = self.store.adopt(replace(self.resolution,
             source=replace(self.resolution.source, locator='github:example/mixed'),
             capabilities=SourcePackageDiscovery().inspect_root(root)['package']), name='Mixed', observations=[])
         plan = self.planner.plan(record['id'], self.target('codex'))
         self.assertEqual(plan.actions, [])
         self.assertIn('primary-standard-manifest-invalid', plan.blockers)
+
+    def test_codex_ignores_unrelated_root_manifest_before_overlay_selection(self):
+        record = self.manifest_record('{"name":"registry-package"}', label='unrelated-root')
+        plan = self.planner.plan(record['id'], self.target('codex'))
+
+        self.assertEqual(plan.support, 'supported', plan.blockers)
+        self.assertEqual(plan.surface['nativeId'].split('@', 1)[0], 'codex-overlay')
+        self.assertNotIn('primary-standard-manifest-invalid', plan.blockers)
+
+    def test_codex_ignores_malformed_root_manifest_before_overlay_selection(self):
+        record = self.manifest_record('{malformed', label='malformed-root')
+        plan = self.planner.plan(record['id'], self.target('codex'))
+
+        self.assertEqual(plan.support, 'supported', plan.blockers)
+        self.assertEqual(plan.surface['nativeId'].split('@', 1)[0], 'codex-overlay')
+
+    def test_codex_unsupported_agent_schema_blocks_overlay_fallback(self):
+        record = self.manifest_record(
+            json.dumps({
+                '$schema': 'https://agent-plugins.org/schemas/2.0.0/plugin.schema.json',
+                'name': 'unsupported-root',
+            }),
+            label='unsupported-root',
+        )
+        plan = self.planner.plan(record['id'], self.target('codex'))
+
+        self.assertEqual(plan.actions, [])
+        self.assertIn('primary-standard-manifest-invalid', plan.blockers)
+
+    def test_codex_supported_root_manifest_precedes_different_overlay_identity(self):
+        record = self.manifest_record(
+            json.dumps({
+                '$schema': 'https://agent-plugins.org/schemas/1.0.0/plugin.schema.json',
+                'name': 'portable-root',
+            }),
+            codex_name='different-overlay', label='supported-root',
+        )
+        plan = self.planner.plan(record['id'], self.target('codex'))
+
+        self.assertEqual(plan.support, 'supported', plan.blockers)
+        self.assertEqual(plan.surface['nativeId'].split('@', 1)[0], 'portable-root')
+
+    def test_codex_nonregular_root_manifest_blocks_overlay_fallback(self):
+        record = self.manifest_record('directory', label='nonregular-root')
+        plan = self.planner.plan(record['id'], self.target('codex'))
+
+        self.assertEqual(plan.actions, [])
+        self.assertIn('primary-standard-manifest-invalid', plan.blockers)
+
+    def test_cursor_valid_explicit_manifest_can_ignore_unrelated_root_manifest(self):
+        record = self.manifest_record(
+            '{"name":"unrelated-root"}', cursor_name='cursor-plugin', label='cursor-unrelated')
+        plan = self.planner.plan(record['id'], self.target('cursor'))
+
+        self.assertEqual(plan.support, 'supported', plan.blockers)
+        self.assertEqual(plan.surface['nativeId'], 'cursor-plugin')

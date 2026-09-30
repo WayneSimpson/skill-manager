@@ -35,12 +35,17 @@ plugin can take precedence. Those facts must be reconciled before marking a
 target available. Standard MCP `${PLUGIN_ROOT}`/`${PLUGIN_DATA}` variables are
 not expanded by Cursor: the planner blocks that known standard-format case;
 it does not rewrite MCP configuration or extract components.
-Invalid co-located standard manifests and conflicting Cursor/standard native
-identifiers are manual cases rather than guesses about loader precedence.
+An unrelated invalid root manifest does not block a valid explicit Cursor
+manifest. Two valid Cursor/standard definitions with conflicting identities remain
+ambiguous. This does not enable Cursor runtime automation.
 
-Codex's current loader gives standard root `plugin.json` precedence and may read a
-Codex overlay. The planner follows that root identity. Other legacy fallback
-formats are documented in source but are not enabled as extra planner routes.
+Codex selects root `plugin.json` only when its `$schema` claims the Agent Plugins
+namespace. Such a root keeps precedence (unsupported/invalid claimed standards
+block); a valid root may use the Codex overlay without borrowing its name.
+Unrelated root JSON, including a document without `$schema`, does not block a
+valid `.codex-plugin/plugin.json`. The planner and native adapter share this
+selection rule. They never hide, rewrite or translate authored manifests. Other
+legacy fallback formats are not enabled as extra planner routes.
 The marketplace source is `{ "source": "local", "path": "./plugins/<id-prefix>" }`,
 relative to the marketplace **root**, not to `.agents/plugins`. A bare root
 `marketplace.json` is not a supported Codex marketplace layout.
@@ -49,7 +54,8 @@ relative to the marketplace **root**, not to `.agents/plugins`. A bare root
 
 The verified route uses `opencode plugin <file-URI> --global` and singular `plugin`
 configuration. The planner accepts `exports["./server"]` (a string or import/default
-entry), or `main` when explicit OpenCode distribution evidence permits it. The
+entry), or `main` when an explicit OpenCode distribution or an exactly pinned
+OpenCode package observation establishes intent. The
 entry must remain inside the acquired package. The runtime fixture exports a
 default object with `id` and `server()`. Directory auto-discovery beneath `plugins/`
 was not proven; the explicit registration is used instead.
@@ -60,6 +66,10 @@ pinned in the central store. Exact external copies/registrations are not claimed
 auto-loaded JS/TS plugins, controls and ambiguous inventory block mutation.
 The existing ownership ledger protects both whole-copy identity and registration
 origin. No version allow-list, minimum-version table or compatibility registry is used.
+Observation intent is retained with the resolved source in existing evidence,
+not inferred from package names, generic executable metadata or old harness labels.
+It cannot be transferred to another source or override external/stale/candidate
+blockers. A package with no valid executable entry remains unsupported.
 
 ## Planner contract
 
@@ -143,3 +153,4 @@ the [deployment guide](native-package-deployment.md#verified-native-support).
 - [Cursor plugins/local testing and policy](https://cursor.com/docs/plugins), [format reference](https://cursor.com/docs/reference/plugins).
 - Codex commit `a8964cb1bad67bc26a826fb07d1bef99c6a3f008`: [CLI](https://github.com/openai/codex/blob/a8964cb1bad67bc26a826fb07d1bef99c6a3f008/codex-rs/cli/src/plugin_cmd.rs), [marketplace layouts/source paths](https://github.com/openai/codex/blob/a8964cb1bad67bc26a826fb07d1bef99c6a3f008/codex-rs/core-plugins/src/marketplace.rs), [manifest precedence/hooks](https://github.com/openai/codex/blob/a8964cb1bad67bc26a826fb07d1bef99c6a3f008/codex-rs/core-plugins/src/manifest.rs), [manager install/store path](https://github.com/openai/codex/blob/a8964cb1bad67bc26a826fb07d1bef99c6a3f008/codex-rs/core-plugins/src/manager.rs).
 - [OpenCode plugins](https://opencode.ai/docs/plugins), [configuration](https://opencode.ai/docs/config); actual installed command help and isolated Task09A runtime evidence take precedence over incompatible documentation snapshots.
+- Codex [schema-aware manifest selection](https://github.com/openai/codex/blob/a8964cb1bad67bc26a826fb07d1bef99c6a3f008/codex-rs/utils/plugins/src/plugin_namespace.rs) defines root-versus-authored-manifest precedence.

@@ -32,6 +32,8 @@ distribution relationships, structural capabilities (without temporary root
 or ID), and a fingerprint over retained paths, bytes and executable bits. They
 also retain the last upstream status, reason and any changed-source candidate.
 Relationships do not infer package families or native support from names.
+Associating a newly verified OpenCode sighting with the same unchanged snapshot
+can add its observation/pin evidence; it does not replace the source or artifact.
 
 ## Capture and ownership
 
@@ -43,8 +45,10 @@ parser interprets them. No Skill/MCP/hook/command reconstruction takes place.
 
 The acquisition exclusion policy is shared: source-control/dependency caches, common
 credential/config paths, `.env*`, `.pem` and `.key` files are excluded. `.envrc`
-is included in the environment-file exclusion. Links and special files are
-rejected; size/file/depth limits apply. These checks never execute package code.
+is included in the environment-file exclusion. Filesystem links and special files
+are still rejected. Safe archive aliases have already been materialised into
+ordinary content and checked against the selected package boundary by acquisition;
+capture does not follow links. Size/file/depth limits apply without executing code.
 This is not a content-based secret scanner or native-loader validation.
 
 Only paths derived from the configured store and a validated ID are destinations.

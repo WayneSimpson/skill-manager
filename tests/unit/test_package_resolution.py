@@ -10,7 +10,7 @@ from unittest.mock import patch
 import zipfile
 
 from skill_manager.application.skills.identity import SourceDescriptor
-from skill_manager.application.skills.inventory import InventoryEntry
+from skill_manager.application.skills.inventory import InventoryEntry, InventorySighting
 from skill_manager.application.skills.package_resolution import PackageSourceResolver
 from skill_manager.application.skills.marketplace.models import SkillsShSkill
 from skill_manager.sources.artifacts import extract_source, public_url
@@ -64,6 +64,21 @@ class PackageResolutionTests(unittest.TestCase):
             return upstream()
         raise AssertionError('Unexpected network request: ' + url)
 
+    def locked_entry(self, resolved, suffix):
+        repository = (self.root / f'cache{suffix}' / 'n8n-skills@git+https:' / 'github.com' /
+                      'n8n-io' / 'skills.git')
+        package = repository / 'node_modules/n8n-skills'
+        skill = package / 'skills/one'
+        skill.mkdir(parents=True)
+        (package / 'package.json').write_text(json.dumps({'name': 'n8n-skills', 'version': '1.2.0'}))
+        (repository / 'package-lock.json').write_text(json.dumps({
+            'lockfileVersion': 3,
+            'packages': {'node_modules/n8n-skills': {'version': '1.2.0', 'resolved': resolved}},
+        }))
+        (skill / 'SKILL.md').write_text('---\nname: one\n---\nExample')
+        return InventoryEntry('test', 'one', '', 'unmanaged', SourceDescriptor('runtime', 'opencode'),
+                              source_path=str(skill))
+
     @patch('skill_manager.sources.github.read_public_bytes')
     def test_partial_native_observation_acquires_full_upstream(self, read):
         self.declare()
@@ -82,6 +97,83 @@ class PackageResolutionTests(unittest.TestCase):
         result = self.resolver.resolve(self.entry, work_dir=self.work)
         self.assertEqual(result.status, 'unresolved')
         self.assertIsNone(result.artifact_root)
+        read.assert_not_called()
+
+    @patch('skill_manager.sources.github.read_public_bytes')
+    def test_git_https_and_ssh_locks_share_canonical_source(self, read):
+        read.side_effect = self.network
+        results = []
+        for index, resolved in enumerate((
+            f'git+https://github.com/n8n-io/skills.git#{COMMIT}',
+            f'git+ssh://git@github.com/n8n-io/skills.git#{COMMIT}',
+        )):
+            work = self.work / f'work-{index}'
+            work.mkdir()
+            result = self.resolver.resolve(
+                self.locked_entry(resolved, str(index)), work_dir=work
+            )
+            results.append(result)
+
+        for result in results:
+            self.assertEqual(result.status, 'resolved', result.reason)
+            self.assertEqual(result.evidence[0].kind, 'npm_lock_git')
+            self.assertEqual(result.source.locator, 'github:n8n-io/skills')
+            self.assertEqual(result.source.revision, COMMIT)
+        self.assertEqual(results[0].source, results[1].source)
+        self.assertTrue(all(call.args[0].startswith('https://') for call in read.call_args_list))
+
+    @patch('skill_manager.sources.github.read_public_bytes')
+    def test_git_ssh_lock_rejects_unsafe_variants(self, read):
+        variants = (
+            'git+ssh://git@github.com/n8n-io/skills.git',
+            f'git+ssh://git@github.com/n8n-io/skills.git#{COMMIT[:-1]}',
+            f'git+ssh://git@github.com/n8n-io/skills.git#{COMMIT.upper()}',
+            f'git+ssh://deploy@github.com/n8n-io/skills.git#{COMMIT}',
+            f'git+ssh://git@github.com:22/n8n-io/skills.git#{COMMIT}',
+            f'git+ssh://git:secret@github.com/n8n-io/skills.git#{COMMIT}',
+            f'git+ssh://git@gitlab.com/n8n-io/skills.git#{COMMIT}',
+            f'git+ssh://git@github.com/n8n-io/skills.git?token=secret#{COMMIT}',
+        )
+        for index, resolved in enumerate(variants):
+            with self.subTest(resolved=resolved):
+                work = self.work / f'invalid-work-{index}'
+                work.mkdir()
+                result = self.resolver.resolve(
+                    self.locked_entry(resolved, f'-invalid-{index}'),
+                    work_dir=work,
+                )
+                self.assertEqual(result.status, 'unresolved')
+                self.assertIsNone(result.source)
+                self.assertNotIn('secret', repr(result))
+        read.assert_not_called()
+
+    @patch('skill_manager.sources.github.read_public_bytes')
+    def test_git_ssh_lock_acquisition_is_https_only_and_does_not_spawn_ssh(self, read):
+        read.side_effect = self.network
+        work = self.work / 'https-work'
+        work.mkdir()
+        with patch('subprocess.run', side_effect=AssertionError('SSH execution forbidden')):
+            result = self.resolver.resolve(
+                self.locked_entry(f'git+ssh://git@github.com/n8n-io/skills.git#{COMMIT}', '-https'),
+                work_dir=work,
+            )
+        self.assertEqual(result.status, 'resolved', result.reason)
+        urls = [call.args[0] for call in read.call_args_list]
+        self.assertEqual(urls, [
+            f'https://api.github.com/repos/n8n-io/skills/commits/{COMMIT}',
+            f'https://codeload.github.com/n8n-io/skills/zip/{COMMIT}',
+        ])
+
+    @patch('skill_manager.sources.github.read_public_bytes')
+    def test_invalid_git_ssh_reports_allowlisted_provenance_reason(self, read):
+        work = self.work / 'reason-work'
+        work.mkdir()
+        result = self.resolver.resolve(
+            self.locked_entry('git+ssh://git@github.com/n8n-io/skills.git', '-reason'),
+            work_dir=work,
+        )
+        self.assertEqual(result.status, 'unresolved')
+        self.assertEqual(result.reason, 'Source resolution failed during provenance: exact Git revision required.')
         read.assert_not_called()
 
     def test_invalid_native_lock_metadata_requires_package_review(self):
@@ -176,6 +268,40 @@ class PackageResolutionTests(unittest.TestCase):
         self.assertEqual(result.status, 'resolved', result.reason)
         self.assertEqual(result.source.package_path, 'plugins/native')
         self.assertFalse(any(self.work.rglob('private.txt')))
+
+    @patch('skill_manager.sources.github.read_public_bytes')
+    def test_alias_cannot_import_a_sibling_into_selected_package(self, read):
+        from tests.unit.test_source_artifacts import zip_archive
+        self.declare({'url': 'https://github.com/example/package.git', 'directory': 'plugins/native'})
+        data = zip_archive([
+            ('plugins/native/.codex-plugin/plugin.json', 'file', '{"name":"example"}', 0o644),
+            ('plugins/native/skills/one/SKILL.md', 'file', '---\nname: one\n---\nOne', 0o644),
+            ('plugins/other/data.txt', 'file', 'outside selected package', 0o644),
+            ('plugins/native/copied', 'link', '../other', 0o777),
+        ])
+        read.side_effect = lambda url, **kw: data if 'codeload' in url else json.dumps({'sha': COMMIT}).encode()
+        result = self.resolver.resolve(self.entry, work_dir=self.work)
+        self.assertEqual(result.status, 'unavailable')
+        self.assertIsNone(result.artifact_root)
+        self.assertIn('alias crosses selected package boundary', result.reason)
+        self.assertEqual(list(self.work.iterdir()), [])
+
+    @patch('skill_manager.sources.github.read_public_bytes')
+    def test_alias_inside_selected_package_preserves_whole_content(self, read):
+        from tests.unit.test_source_artifacts import zip_archive
+        self.declare({'url': 'https://github.com/example/package.git', 'directory': 'plugins/native'})
+        data = zip_archive([
+            ('plugins/native/.codex-plugin/plugin.json', 'file', '{"name":"example"}', 0o644),
+            ('plugins/native/skills/one/SKILL.md', 'file', '---\nname: one\n---\nOne', 0o644),
+            ('plugins/native/copy', 'link', 'skills', 0o777),
+            ('plugins/other/data.txt', 'file', 'not retained', 0o644),
+        ])
+        read.side_effect = lambda url, **kw: data if 'codeload' in url else json.dumps({'sha': COMMIT}).encode()
+        result = self.resolver.resolve(self.entry, work_dir=self.work)
+        self.assertEqual(result.status, 'resolved', result.reason)
+        self.assertEqual((result.artifact_root / 'copy/one/SKILL.md').read_text(), '---\nname: one\n---\nOne')
+        self.assertFalse(any(p.is_symlink() for p in result.artifact_root.rglob('*')))
+        self.assertFalse(any(self.work.rglob('data.txt')))
 
     @patch('skill_manager.sources.github.read_public_bytes')
     def test_ambiguous_skill_id_inside_known_repository(self, read):
@@ -377,6 +503,14 @@ class PackageResolutionTests(unittest.TestCase):
         self.assertEqual(result.distributions[0].source.revision, COMMIT)
         self.assertIsNone(result.distributions[0].harness)
         self.assertEqual(result.capabilities['manifests'][0]['path'], '.codex-plugin/plugin.json')
+        sighting = InventorySighting('harness', 'opencode', 'OpenCode', 'configured', skill, None,
+                                     SourceDescriptor('harness-local', 'opencode'))
+        with patch.object(self.entry, 'source', SourceDescriptor('npm', 'npm:@sample/extension@1.2.3')), \
+                patch.object(self.entry, 'sightings', [sighting]):
+            direct = self.resolver.resolve(self.entry, work_dir=self.work)
+            self.assertEqual(direct.status, 'resolved', direct.reason)
+            self.assertEqual(direct.source, result.source)
+            self.assertIn('opencode_package_observation', {item.kind for item in direct.evidence})
         # Same name is insufficient to invent a source relationship.
         del metadata.return_value['repository']
         result = self.resolver.resolve(self.entry, work_dir=self.work)

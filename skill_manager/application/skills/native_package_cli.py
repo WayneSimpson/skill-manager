@@ -33,6 +33,7 @@ from .package_deployment import (
 )
 from .managed_packages import package_fingerprint
 from .package_resolution import PackageSource, _repository, _npm
+from .source_package import select_codex_manifest
 from skill_manager.atomic_files import atomic_write_text
 from skill_manager.jsonc import strip_jsonc
 
@@ -654,7 +655,10 @@ class CodexNativePackageAdapter(_NativePackageCLIAdapter):
             return None
         if not _safe_actual_directory(root, self.root):
             return None
-        return root if _manifest_name(root / "plugin.json", root / ".codex-plugin/plugin.json") == entry.name else None
+        selection = select_codex_manifest(root)
+        if selection.status not in ('supported', 'legacy') or selection.name != entry.name:
+            return None
+        return root
 
     def _matching_deployment_id(
         self,
@@ -784,7 +788,8 @@ class CodexNativePackageAdapter(_NativePackageCLIAdapter):
         actual = Path(raw)
         if not _same_path(actual, expected) or not _safe_actual_directory(actual):
             return False
-        return _manifest_name(actual / "plugin.json", actual / ".codex-plugin/plugin.json") is not None
+        selection = select_codex_manifest(actual)
+        return selection.status in ('supported', 'legacy') and selection.name == entry.name
 
     @staticmethod
     def _native_absent(info: dict[str, Any]) -> bool:

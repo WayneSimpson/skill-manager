@@ -225,7 +225,8 @@ def _normalize_relative_path(relative_path: str | None) -> str:
 
 
 class GitHubSource:
-    def acquire_repository(self, repo: str, work_dir: Path, *, ref: str | None = None) -> tuple[Path, str]:
+    def acquire_repository(self, repo: str, work_dir: Path, *, ref: str | None = None,
+                           alias_targets: dict[str, str] | None = None) -> tuple[Path, str]:
         """Fetch an immutable source snapshot without checkout filters or credentials."""
         if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repo) or any(
             part in {'.', '..'} for part in repo.split('/')
@@ -244,7 +245,9 @@ class GitHubSource:
             raise ValueError('Source revision mismatch')
         data = read_public_bytes(f'https://codeload.github.com/{repo}/zip/{revision}')
         root = work_dir / 'repository'
-        extract_source(data, root, kind='zip')
+        aliases = extract_source(data, root, kind='zip')
+        if alias_targets is not None:
+            alias_targets.update(aliases)
         return root, revision
 
     def resolve(self, locator: str, work_dir: Path) -> ResolvedGitHubSkill:

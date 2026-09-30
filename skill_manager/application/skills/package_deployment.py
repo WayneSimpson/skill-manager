@@ -11,7 +11,8 @@ from urllib.parse import unquote, urlsplit
 
 from skill_manager.jsonc import strip_jsonc
 from .managed_packages import ManagedPackageStore, package_fingerprint
-from .package_resolution import PackageSource
+from .package_resolution import PackageSource, _pinned_installation_source
+from .source_package import select_codex_manifest
 
 
 EVIDENCE_DATE = '2026-09-15'
@@ -83,6 +84,22 @@ def _same_source(left: dict, right: dict) -> bool:
     if left.get('revision'):
         return left['revision'] == right.get('revision')
     return left.get('kind') == 'npm' and bool(left.get('version')) and left['version'] == right.get('version')
+
+
+def _observed_opencode_intent(record: dict) -> bool:
+    # Central capture binds these server-observed sightings to the acquired source.
+    # A label, cache dirname, originHarness or unpinned repository hint is not proof.
+    if not any(item.get('harness') == 'opencode' and item.get('ownership') == 'external-existing'
+               and isinstance(item.get('path'), str) and Path(item['path']).is_absolute()
+               for item in record.get('observations', [])):
+        return False
+    source = record['source']
+    evidence = record.get('evidence', [])
+    return any(item.get('kind') == 'opencode_package_observation'
+               and item.get('source', {}).get('revision') == source.get('revision')
+               and _same_source(item.get('source', {}), source) for item in evidence) and any(
+        _pinned_installation_source(item.get('kind'), item.get('source', {}), source) for item in evidence
+    )
 
 
 def _state(record: dict) -> dict:
@@ -237,14 +254,15 @@ class PackageDeploymentPlanner:
             plan.blockers.append('external-observation-needs-native-reconciliation')
 
         try:
+            observed_opencode = target.harness == 'opencode' and _observed_opencode_intent(selected)
             self._strategy(
                 plan,
                 selected,
                 target,
-                native_intent=bool(relationships or matches),
+                native_intent=bool(relationships or matches or observed_opencode),
                 explicit_opencode_intent=any(
                     item.get('harness') == 'opencode' for item in relationships
-                ),
+                ) or observed_opencode,
             )
         except (OSError, ValueError, RuntimeError):
             plan.strategy = 'manual/unsupported'
@@ -382,15 +400,29 @@ class PackageDeploymentPlanner:
         paths = {item['path'] for item in manifests
                  if item['evidence'] != 'unresolved'}
         harness = target.harness
-        if harness in ('codex', 'cursor') and any(item['path'] == 'plugin.json' for item in manifests) and 'plugin.json' not in paths:
-            plan.blockers.append('primary-standard-manifest-invalid')
-            return
         suffix = record['id'][:16]
         manifest = f'.{harness}-plugin/plugin.json'
+        if harness == 'codex':
+            selection = select_codex_manifest(Path(record['artifactRoot']))
+            if selection.status in ('blocked', 'unsupported'):
+                plan.blockers.append('primary-standard-manifest-invalid')
+                return
+            if selection.path is None:
+                plan.blockers.append('no-proven-native-format')
+                return
+            manifest = selection.path.relative_to(Path(record['artifactRoot'])).as_posix()
+            if manifest not in paths:
+                plan.blockers.append('primary-standard-manifest-invalid' if selection.status == 'supported'
+                                      else 'no-proven-native-format')
+                return
         if harness == 'cursor' and manifest not in paths:
-            manifest = 'plugin.json'
-        if harness == 'codex' and 'plugin.json' in paths:
-            manifest = 'plugin.json'  # current Codex loader gives the standard manifest precedence
+            if 'plugin.json' in paths:
+                manifest = 'plugin.json'
+            elif any(item['path'] == 'plugin.json' for item in manifests):
+                plan.blockers.append('primary-standard-manifest-invalid')
+                return
+            else:
+                manifest = 'plugin.json'
         if harness != 'opencode':
             if manifest not in paths:
                 plan.blockers.append('no-proven-native-format')
