@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tansta
 import { queryPolicy } from "../../../lib/query";
 import {
   acknowledgeManualApply,
+  fetchModelCatalogue,
+  fetchPermissionActions,
   applyAgentConfig,
   createAgent,
   fetchAgentApplyCapability,
@@ -104,5 +106,22 @@ export function useAcknowledgeManualApplyMutation() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: agentKeys.applyStatus() });
     },
+  });
+}
+
+export function useModelCatalogueQuery() {
+  return useQuery({
+    queryKey: agentKeys.modelCatalogue(),
+    queryFn: fetchModelCatalogue,
+    staleTime: 60_000, // Catalogue doesn't change per second.
+    gcTime: 5 * 60_000,
+  });
+}
+
+export function usePermissionActionsQuery() {
+  return useQuery({
+    queryKey: agentKeys.permissionActions(),
+    queryFn: fetchPermissionActions,
+    staleTime: 5 * 60_000,
   });
 }

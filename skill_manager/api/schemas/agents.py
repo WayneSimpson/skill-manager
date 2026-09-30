@@ -67,6 +67,14 @@ __all__ = [
 ]
 
 
+class AgentPermissionRuleRequest(BaseModel):
+    action: str
+    effect: str  # allow | ask | deny | inherit (inherit removes the rule)
+    resource: str | None = None
+    order: int | None = None
+    rawValue: Any = None  # Opaque fidelity passthrough (unknown fields, V2 extras)
+
+
 class AgentFieldsRequest(BaseModel):
     name: str | None = None
     description: str | None = None
@@ -75,6 +83,7 @@ class AgentFieldsRequest(BaseModel):
     variant: str | None = None
     mode: str | None = None
     renameTo: str | None = None
+    permissionRules: list[AgentPermissionRuleRequest] | None = None
 
 
 class AgentPreviewCreateRequest(BaseModel):
@@ -191,3 +200,27 @@ class AgentAcknowledgeResultResponse(BaseModel):
     pending: bool
     target: str
     acknowledgedTargets: list[str] = Field(default_factory=list)
+
+
+class ModelCatalogueEntryResponse(BaseModel):
+    id: str
+    providerId: str
+    providerName: str
+    name: str
+    status: str
+    reasoning: bool
+    variants: list[str]
+
+
+class ModelCatalogueProviderResponse(BaseModel):
+    id: str
+    name: str
+    source: str
+    models: list[ModelCatalogueEntryResponse]
+
+
+class ModelCatalogueResponse(BaseModel):
+    source: str
+    providers: list[ModelCatalogueProviderResponse]
+    totalModels: int
+    detail: str | None = None

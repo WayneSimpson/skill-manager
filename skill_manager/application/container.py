@@ -42,6 +42,7 @@ def build_opencode_capability_detector(env: dict[str, str]):
 
     return OpenCodeCapabilityDetector(command_registry=registry)
 from .agents import OpenCodeAgentApplyService, OpenCodeAgentMutationService, OpenCodeAgentQueryService
+from skill_manager.opencode.agent_catalogue import OpenCodeAgentCatalogueService
 from .invalidation import InvalidationFanout
 from .mcp.enrichment import McpEnrichmentService
 from .mcp.marketplace import McpMarketplaceCatalog
@@ -120,6 +121,7 @@ class BackendContainer:
     opencode_agent_queries: OpenCodeAgentQueryService
     opencode_agent_mutations: OpenCodeAgentMutationService
     opencode_agent_apply: OpenCodeAgentApplyService
+    opencode_agent_catalogue: OpenCodeAgentCatalogueService
     db: Database
     scan_config_service: ScanConfigService
     scan_service: ScanService
@@ -234,9 +236,23 @@ def build_backend_container(
     )
     opencode_agent_queries = OpenCodeAgentQueryService(harness_kernel)
     agent_apply_store = AgentApplyStateStore(paths.state_dir / "opencode-agent-apply.json")
+    # Catalogue server URL: explicit env override wins; otherwise reuse the
+    # already-configured OpenCode runtime connection (RuntimeSkillSnapshotStore).
+    # Never silently probe localhost when no configured runtime exists.
+    catalogue_server_url = active_env.get("SKILL_MANAGER_OPENCODE_SERVER_URL")
+    if not catalogue_server_url:
+        runtime_status = runtime_skills.store.status()
+        snapshot_url = runtime_status.get("serverUrl")
+        if runtime_status.get("status") in ("ready", "error") and isinstance(snapshot_url, str):
+            catalogue_server_url = snapshot_url
+    opencode_agent_catalogue = OpenCodeAgentCatalogueService(
+        harness_kernel.context,
+        server_url=catalogue_server_url,
+    )
     opencode_agent_mutations = OpenCodeAgentMutationService(
         harness_kernel, paths.state_dir / "opencode-agent-backups",
         apply_store=agent_apply_store,
+        catalogue_service=opencode_agent_catalogue,
     )
     opencode_agent_apply = OpenCodeAgentApplyService(
         harness_kernel,
@@ -292,6 +308,7 @@ def build_backend_container(
         opencode_agent_queries=opencode_agent_queries,
         opencode_agent_mutations=opencode_agent_mutations,
         opencode_agent_apply=opencode_agent_apply,
+        opencode_agent_catalogue=opencode_agent_catalogue,
         db=db,
         scan_config_service=scan_config_service,
         scan_service=scan_service,

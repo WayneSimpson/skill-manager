@@ -412,6 +412,20 @@
             ],
             "title": "Name"
           },
+          "permissionRules": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/AgentPermissionRuleRequest"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Permissionrules"
+          },
           "renameTo": {
             "anyOf": [
               {
@@ -436,6 +450,49 @@
           }
         },
         "title": "AgentFieldsRequest",
+        "type": "object"
+      },
+      "AgentPermissionRuleRequest": {
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "effect": {
+            "title": "Effect",
+            "type": "string"
+          },
+          "order": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order"
+          },
+          "rawValue": {
+            "title": "Rawvalue"
+          },
+          "resource": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resource"
+          }
+        },
+        "required": [
+          "action",
+          "effect"
+        ],
+        "title": "AgentPermissionRuleRequest",
         "type": "object"
       },
       "AgentPreviewCreateRequest": {
@@ -7071,6 +7128,46 @@
           }
         },
         "summary": "Opencode Agent Editor Context"
+      }
+    },
+    "/api/agents/opencode/model-catalogue": {
+      "get": {
+        "operationId": "opencode_agent_model_catalogue_api_agents_opencode_model_catalogue_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Opencode Agent Model Catalogue Api Agents Opencode Model Catalogue Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Opencode Agent Model Catalogue"
+      }
+    },
+    "/api/agents/opencode/permission-actions": {
+      "get": {
+        "operationId": "opencode_agent_permission_actions_api_agents_opencode_permission_actions_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Opencode Agent Permission Actions Api Agents Opencode Permission Actions Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Opencode Agent Permission Actions"
       }
     },
     "/api/agents/opencode/preview-create": {

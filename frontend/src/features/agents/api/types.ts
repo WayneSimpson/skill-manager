@@ -140,3 +140,45 @@ export interface AgentAcknowledgeResultDto {
   pending: boolean;
   target: string;
 }
+
+export interface ModelCatalogueEntryDto {
+  id: string;
+  providerId: string;
+  providerName: string;
+  name: string;
+  status: string;
+  reasoning: boolean;
+  variants: string[];
+}
+
+export interface ModelCatalogueProviderDto {
+  id: string;
+  name: string;
+  source: string;
+  connected: boolean | null; // null = unknown (cache fallback)
+  models: ModelCatalogueEntryDto[];
+}
+
+export interface ModelCatalogueDto {
+  source: "runtime" | "cache" | "unavailable";
+  providers: ModelCatalogueProviderDto[];
+  connectedProviderIds?: string[];
+  totalModels: number;
+  detail?: string;
+}
+
+export interface PermissionRuleDto {
+  action: string;
+  effect: "allow" | "ask" | "deny" | "inherit";
+  resource: string | null;
+  /** V2 rule order for round-trip fidelity; opaque to the UI. */
+  order?: number;
+  /** Opaque raw fidelity data (unknown V1 values, V2 extra fields) carried through untouched. */
+  rawValue?: unknown;
+}
+
+export interface PermissionActionsDto {
+  v1: string[];
+  v2: string[];
+  effects: string[];
+}

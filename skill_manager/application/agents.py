@@ -1,6 +1,7 @@
 """Read-only queries and guarded persistence for OpenCode config-declared agents."""
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import asdict
 import difflib
 import hashlib
@@ -141,6 +142,9 @@ class AgentFields:
         self.variant = _optional_string(fields.get("variant"), "variant")
         self.mode = _optional_string(fields.get("mode"), "mode")
         self.rename_to = _optional_string(fields.get("renameTo"), "renameTo")
+        # Structured permission rules in the neutral internal representation.
+        self.permission_rules = _parse_permission_rules(
+            fields.get("permissionRules"))
         self._touched = set(fields.keys())
 
     def touched(self, field: str) -> bool:
@@ -153,6 +157,44 @@ def _optional_string(value: Any, label: str) -> str | None:
     if not isinstance(value, str) or not value.strip():
         raise MutationError(f"Agent {label} must be a non-empty string when provided.", 422)
     return value
+
+
+def _parse_permission_rules(value: Any) -> list | None:
+    """Parse neutral permission rule dicts from the editor request."""
+    if value is None:
+        return None
+    if not isinstance(value, list):
+        raise MutationError("permissionRules must be a list of rule objects.", 422)
+    from skill_manager.opencode.agent_permissions import PermissionRule
+    rules = []
+    for index, entry in enumerate(value):
+        if not isinstance(entry, dict):
+            raise MutationError("Each permission rule must be an object.", 422)
+        action = entry.get("action")
+        effect = entry.get("effect")
+        if not isinstance(action, str) or not action:
+            raise MutationError(f"Permission rule {index} has no action.", 422)
+        if not isinstance(effect, str) or effect not in ("allow", "ask", "deny",
+                                                         "inherit"):
+            raise MutationError(
+                f"Permission rule {index} has an invalid effect.", 422)
+        resource = entry.get("resource")
+        if resource is not None and not isinstance(resource, str):
+            raise MutationError(
+                f"Permission rule {index} has an invalid resource.", 422)
+        # Opaque raw fidelity data from the frontend (unknown V1 values,
+        # V2 extra fields) — carried through untouched for round-trip.
+        raw_value = entry.get("rawValue")
+        # "inherit" means remove the rule; store as a marker.
+        if effect == "inherit":
+            rules.append({"action": action, "effect": "inherit",
+                          "resource": resource, "order": index})
+        else:
+            rules.append(PermissionRule(
+                action=action, effect=effect, resource=resource, order=index,
+                raw_value=raw_value,
+            ))
+    return rules
 
 
 def _require_generation(generation: str | None) -> str:
@@ -173,10 +215,12 @@ class OpenCodeAgentMutationService:
     last_failure_detail: str | None = None
 
     def __init__(self, kernel: HarnessKernelService, backup_root: Path,
-                 apply_store: "AgentApplyStateStore | None" = None):
+                 apply_store: "AgentApplyStateStore | None" = None,
+                 catalogue_service=None):
         self._kernel = kernel
         self._backup_root = backup_root
         self._apply_store = apply_store
+        self._catalogue_service = catalogue_service
 
     # ---- context / metadata -------------------------------------------------
 
@@ -207,30 +251,28 @@ class OpenCodeAgentMutationService:
         }
 
     def variant_options(self, model: str) -> list[str]:
-        """Best-effort authoritative variant list from OpenCode's model catalog."""
+        """Per-model variants from the shared catalogue service (runtime → cache)."""
         if not isinstance(model, str) or not model.strip():
             return []
         base = model.split("#", 1)[0]
-        provider, _, model_id = base.partition("/")
-        if not provider or not model_id:
-            return []
-        catalog_path = self._kernel.context.env.get("XDG_CACHE_HOME") or \
-            str(Path.home() / ".cache")
-        catalog = Path(catalog_path) / "opencode" / "models.json"
-        try:
-            if not catalog.is_file() or catalog.stat().st_size > _MAX_CATALOG_BYTES:
-                return []
-            data = json.loads(catalog.read_text(encoding="utf-8"))
-            models = (data.get(provider) or {}).get("models") or {}
-            entry = models.get(model_id)
-            if not isinstance(entry, dict):
-                return []
-            for option in entry.get("reasoning_options") or []:
-                if isinstance(option, dict) and option.get("type") == "effort" \
-                        and isinstance(option.get("values"), list):
-                    return [str(value) for value in option["values"] if value]
-        except (OSError, ValueError, UnicodeError, AttributeError):
-            return []
+        # Use the shared injected catalogue service (same source as the
+        # model-catalogue endpoint) rather than duplicating connection logic.
+        if self._catalogue_service is not None:
+            catalogue = self._catalogue_service.catalogue()
+        else:
+            from skill_manager.opencode.agent_catalogue import (
+                OpenCodeAgentCatalogueService,
+            )
+            catalogue = OpenCodeAgentCatalogueService(
+                self._kernel.context,
+                server_url=self._kernel.context.env.get(
+                    "SKILL_MANAGER_OPENCODE_SERVER_URL"),
+            ).catalogue()
+        for provider in catalogue.get("providers", []):
+            for entry in provider.get("models", []):
+                if entry.get("id") == base:
+                    variants = entry.get("variants") or []
+                    return [str(v) for v in variants if v]
         return []
 
     # ---- preview ------------------------------------------------------------
@@ -408,6 +450,52 @@ class OpenCodeAgentMutationService:
             definition["mode"] = fields.mode or "subagent"
         if is_create:
             definition["mode"] = "subagent"  # Always explicit; never a harness default.
+
+        if fields.touched("permissionRules") and fields.permission_rules is not None:
+            from skill_manager.opencode.agent_permissions import PermissionRule
+            from skill_manager.opencode.agent_permissions import (
+                from_generation as perms_from_generation,
+            )
+            # Separate real rules from inherit (removal) markers.
+            real_rules = [r for r in fields.permission_rules
+                          if not (isinstance(r, dict) and r.get("effect") == "inherit")]
+            inherit_markers = [
+                r for r in fields.permission_rules
+                if isinstance(r, dict) and r.get("effect") == "inherit"
+            ]
+            if generation == "v2":
+                serialized = perms_from_generation("v2", real_rules) if real_rules else None
+                if serialized is None:
+                    definition.pop("permissions", None)
+                else:
+                    definition["permissions"] = serialized
+            else:
+                # V1: merge changes into the existing permission dict,
+                # removing only the specific targeted rules (not whole actions).
+                v1_rules = [r for r in real_rules if not isinstance(r, dict)]
+                existing_perms = deepcopy(definition.get("permission"))
+                if inherit_markers and isinstance(existing_perms, dict):
+                    for marker in inherit_markers:
+                        action = marker.get("action", "")
+                        resource = marker.get("resource")
+                        if resource is None:
+                            # Remove the whole action override.
+                            existing_perms.pop(action, None)
+                        elif isinstance(existing_perms.get(action), dict):
+                            # Remove only the targeted pattern from a scoped rule.
+                            existing_perms[action].pop(resource, None)
+                            if not existing_perms[action]:
+                                del existing_perms[action]
+                    if not existing_perms:
+                        definition.pop("permission", None)
+                    else:
+                        definition["permission"] = existing_perms
+                if v1_rules:
+                    serialized = perms_from_generation("v1", v1_rules)
+                    if serialized:
+                        definition["permission"] = {
+                            **(definition.get("permission") or {}), **serialized,
+                        }
 
         if fields.touched("model") or fields.touched("variant"):
             if generation == "v2":

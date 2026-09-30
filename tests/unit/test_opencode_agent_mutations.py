@@ -350,13 +350,15 @@ class OpenCodeAgentMutationTests(unittest.TestCase):
     def test_variant_options_come_from_model_catalog_and_missing_means_free_text(self):
         cache = self.root / "home/.cache/opencode"
         cache.mkdir(parents=True)
+        # Uses the runtime/cache catalogue's `variants` keyed-object format.
         (cache / "models.json").write_text(json.dumps({
             "anthropic": {"models": {"claude-sonnet-4-5": {
                 "id": "claude-sonnet-4-5",
-                "reasoning_options": [{"type": "effort", "values": ["low", "high"]}],
+                "variants": {"low": {"reasoningEffort": "low"},
+                             "high": {"reasoningEffort": "high"}},
             }}}}))
         self.assertEqual(
-            self.service.variant_options("anthropic/claude-sonnet-4-5#high"), ["low", "high"])
+            self.service.variant_options("anthropic/claude-sonnet-4-5#high"), ["high", "low"])
         self.assertEqual(self.service.variant_options("anthropic/unknown-model"), [])
         self.assertEqual(self.service.variant_options("not-a-model"), [])
 
@@ -381,3 +383,143 @@ class OpenCodeAgentMutationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PermissionMutationTests(unittest.TestCase):
+    """Task 14: targeted V1/V2 permission removal and fidelity round-trip."""
+
+    def setUp(self):
+        self.temp = TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        from tests.unit.test_opencode_apply_lifecycle import make_kernel
+        self.kernel = make_kernel(self.root)
+        self.config = self.root / "home/.config/opencode/opencode.jsonc"
+        self.config.parent.mkdir(parents=True)
+        self.service = OpenCodeAgentMutationService(self.kernel, self.root / "backups")
+
+    def write_config(self, body: str) -> None:
+        self.config.write_text(body, encoding="utf-8")
+
+    def _update(self, fields, name="reviewer"):
+        return self.service.update_agent(
+            name, "v1", fields, expected_hash=self.service.source_hash(self.config),
+        )
+
+    def test_v1_explicit_inherit_removes_only_targeted_action(self):
+        self.write_config(json.dumps({"agent": {"reviewer": {
+            "description": "d", "mode": "subagent",
+            "permission": {"edit": "deny", "bash": "ask"},
+        }}}))
+        self._update({"permissionRules": [
+            {"action": "edit", "effect": "inherit"},   # Remove edit.
+            {"action": "bash", "effect": "ask"},        # Keep bash.
+        ]})
+        agent = json.loads(self.config.read_text())["agent"]["reviewer"]
+        self.assertNotIn("edit", agent["permission"])
+        self.assertEqual(agent["permission"]["bash"], "ask")
+
+    def test_v1_pattern_scoped_inherit_removes_only_that_pattern(self):
+        self.write_config(json.dumps({"agent": {"reviewer": {
+            "description": "d", "mode": "subagent",
+            "permission": {
+                "bash": {"git push": "ask", "grep *": "allow"},
+                "edit": "deny",
+            },
+        }}}))
+        self._update({"permissionRules": [
+            {"action": "bash", "effect": "inherit", "resource": "git push"},
+            {"action": "bash", "effect": "allow", "resource": "grep *"},
+            {"action": "edit", "effect": "deny"},
+        ]})
+        agent = json.loads(self.config.read_text())["agent"]["reviewer"]
+        # Only git push removed; grep * and edit survive.
+        self.assertNotIn("git push", agent["permission"]["bash"])
+        self.assertEqual(agent["permission"]["bash"], {"grep *": "allow"})
+        self.assertEqual(agent["permission"]["edit"], "deny")
+
+    def test_v2_inherit_removes_only_targeted_ordered_rule(self):
+        self.write_config(json.dumps({"agents": {"reviewer": {
+            "description": "d", "mode": "subagent",
+            "permissions": [
+                {"action": "shell", "resource": "*", "effect": "ask"},
+                {"action": "shell", "resource": "git status", "effect": "allow"},
+                {"action": "edit", "resource": "*", "effect": "deny"},
+            ],
+        }}}))
+        self.service.update_agent(
+            "reviewer", "v2",
+            {"permissionRules": [
+                {"action": "shell", "effect": "ask", "resource": "*"},
+                {"action": "edit", "effect": "deny", "resource": "*"},
+            ]},
+            expected_hash=self.service.source_hash(self.config),
+        )
+        agent = json.loads(self.config.read_text())["agents"]["reviewer"]
+        # The "git status" allow rule was removed (inherit via omission).
+        self.assertEqual(len(agent["permissions"]), 2)
+        actions = [(r["action"], r["resource"]) for r in agent["permissions"]]
+        self.assertEqual(actions, [("shell", "*"), ("edit", "*")])
+
+    def test_unknown_v1_custom_permission_survives_common_permission_change(self):
+        self.write_config(json.dumps({"agent": {"reviewer": {
+            "description": "d", "mode": "subagent",
+            "permission": {
+                "edit": "deny",
+                "n8n_nccio_*": "deny",
+                "custom_unknown": 42,
+            },
+        }}}))
+        self._update({"permissionRules": [
+            {"action": "edit", "effect": "allow"},
+            {"action": "n8n_nccio_*", "effect": "deny"},
+            {"action": "custom_unknown", "effect": "allow", "rawValue": 42},
+        ]})
+        agent = json.loads(self.config.read_text())["agent"]["reviewer"]
+        self.assertEqual(agent["permission"]["edit"], "allow")
+        self.assertEqual(agent["permission"]["n8n_nccio_*"], "deny")
+        self.assertEqual(agent["permission"]["custom_unknown"], 42)
+
+    def test_v2_extra_fields_survive_common_permission_change(self):
+        extra_rule = {"action": "future_tool", "resource": "*", "effect": "deny",
+                      "timeout": 30, "priority": "high"}
+        self.write_config(json.dumps({"agents": {"reviewer": {
+            "description": "d", "mode": "subagent",
+            "permissions": [
+                {"action": "edit", "resource": "*", "effect": "deny"},
+                extra_rule,
+            ],
+        }}}))
+        self.service.update_agent(
+            "reviewer", "v2",
+            {"permissionRules": [
+                {"action": "edit", "effect": "allow", "resource": "*"},
+                {"action": "future_tool", "effect": "deny", "resource": "*",
+                 "order": 1, "rawValue": extra_rule},
+            ]},
+            expected_hash=self.service.source_hash(self.config),
+        )
+        agent = json.loads(self.config.read_text())["agents"]["reviewer"]
+        self.assertEqual(agent["permissions"][0]["effect"], "allow")
+        self.assertEqual(agent["permissions"][1], extra_rule)  # Extra fields preserved.
+
+    def test_omitted_mode_not_materialised_by_unrelated_edit(self):
+        # Agent has NO mode key; an unrelated description edit must not add one.
+        self.write_config(json.dumps({"agent": {"reviewer": {
+            "description": "d",
+            "permission": {"edit": "deny"},
+        }}}))
+        self._update({"description": "new description"})
+        agent = json.loads(self.config.read_text())["agent"]["reviewer"]
+        self.assertNotIn("mode", agent)
+        self.assertEqual(agent["description"], "new description")
+
+    def test_omitted_model_not_materialised_by_unrelated_edit(self):
+        self.write_config(json.dumps({"agent": {"reviewer": {
+            "description": "d",
+            "prompt": "p",
+        }}}))
+        self._update({"description": "new"})
+        agent = json.loads(self.config.read_text())["agent"]["reviewer"]
+        self.assertNotIn("model", agent)
+        self.assertNotIn("variant", agent)

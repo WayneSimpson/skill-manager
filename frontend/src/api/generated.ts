@@ -107,6 +107,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/agents/opencode/model-catalogue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Opencode Agent Model Catalogue */
+        get: operations["opencode_agent_model_catalogue_api_agents_opencode_model_catalogue_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agents/opencode/permission-actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Opencode Agent Permission Actions */
+        get: operations["opencode_agent_permission_actions_api_agents_opencode_permission_actions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/agents/opencode/preview-create": {
         parameters: {
             query?: never;
@@ -1306,10 +1340,25 @@ export interface components {
             model?: string | null;
             /** Name */
             name?: string | null;
+            /** Permissionrules */
+            permissionRules?: components["schemas"]["AgentPermissionRuleRequest"][] | null;
             /** Renameto */
             renameTo?: string | null;
             /** Variant */
             variant?: string | null;
+        };
+        /** AgentPermissionRuleRequest */
+        AgentPermissionRuleRequest: {
+            /** Action */
+            action: string;
+            /** Effect */
+            effect: string;
+            /** Order */
+            order?: number | null;
+            /** Rawvalue */
+            rawValue?: unknown;
+            /** Resource */
+            resource?: string | null;
         };
         /** AgentPreviewCreateRequest */
         AgentPreviewCreateRequest: {
@@ -3558,6 +3607,50 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AgentEditorContextResponse"];
+                };
+            };
+        };
+    };
+    opencode_agent_model_catalogue_api_agents_opencode_model_catalogue_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    opencode_agent_permission_actions_api_agents_opencode_permission_actions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };

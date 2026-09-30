@@ -133,3 +133,24 @@ def get_opencode_agent(
     except ValueError as error:
         status = 400 if str(error).startswith("invalid schemaGeneration") else 404
         raise HTTPException(status_code=status, detail=str(error)) from error
+
+
+@router.get("/opencode/model-catalogue")
+def opencode_agent_model_catalogue(
+    container: BackendContainer = Depends(get_container),
+) -> dict[str, object]:
+    return container.opencode_agent_catalogue.catalogue()
+
+
+@router.get("/opencode/permission-actions")
+def opencode_agent_permission_actions(
+    container: BackendContainer = Depends(get_container),
+) -> dict[str, object]:
+    from skill_manager.opencode.agent_permissions import (
+        COMMON_ACTIONS_V1, COMMON_ACTIONS_V2,
+    )
+    return {
+        "v1": list(COMMON_ACTIONS_V1),
+        "v2": list(COMMON_ACTIONS_V2),
+        "effects": ["allow", "ask", "deny"],
+    }

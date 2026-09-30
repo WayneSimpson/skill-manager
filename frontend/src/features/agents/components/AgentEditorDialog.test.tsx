@@ -20,6 +20,11 @@ vi.mock("../api/queries", async (importOriginal) => {
   return {
     ...actual,
     useAgentEditorContextQuery: vi.fn(() => ({ data: undefined, isPending: false })),
+    useModelCatalogueQuery: vi.fn(() => ({
+      data: { source: "unavailable", providers: [], totalModels: 0 },
+      isPending: false,
+      error: null,
+    })),
     usePreviewAgentCreateMutation: vi.fn(idle),
     usePreviewAgentUpdateMutation: vi.fn(idle),
     useCreateAgentMutation: vi.fn(idle),
@@ -103,9 +108,10 @@ describe("AgentEditorDialog", () => {
     // Nothing entered yet: the draft is clean.
     expect(screen.getByText("Saved")).toBeInTheDocument();
 
-    // Mode is locked to subagent for creation.
-    const modeSelect = screen.getByDisplayValue("subagent") as HTMLSelectElement;
+    // Mode is locked to subagent for creation (labeled "Agent role").
+    const modeSelect = screen.getByRole("combobox", { name: /Agent role/i }) as HTMLSelectElement;
     expect(modeSelect.disabled).toBe(true);
+    expect(modeSelect.value).toBe("subagent");
     expect(screen.getByText("New agents are always created as sub-agents.")).toBeInTheDocument();
 
     // Typing a name marks the draft unsaved.
