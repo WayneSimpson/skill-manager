@@ -381,6 +381,161 @@ class OpenCodeAgentMutationTests(unittest.TestCase):
         self.assertIn("Reviews code", self.config.read_text())  # write target untouched
 
 
+def _strip_jsonc_comments(text: str) -> str:
+    import re
+    return re.sub(r"//[^\n]*", "", text)
+
+
+class EffectSemanticsTests(unittest.TestCase):
+    """Task 14B: explicit Allow/Ask/Deny values, Inherit-writes-nothing, and
+    preview/save serialization parity for both generations."""
+
+    def setUp(self):
+        self.temp = TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        from tests.unit.test_opencode_apply_lifecycle import make_kernel
+        self.kernel = make_kernel(self.root)
+        self.config = self.root / "home/.config/opencode/opencode.jsonc"
+        self.config.parent.mkdir(parents=True)
+        self.service = OpenCodeAgentMutationService(self.kernel, self.root / "backups")
+
+    def write_config(self, body: str) -> None:
+        self.config.write_text(body, encoding="utf-8")
+
+    def _hash(self):
+        return self.service.source_hash(self.config)
+
+    def test_v1_allow_ask_deny_write_exact_values_including_wildcards(self):
+        self.write_config(json.dumps({"agent": {"reviewer": {
+            "description": "d", "mode": "subagent",
+        }}}))
+        self.service.update_agent("reviewer", "v1", {"permissionRules": [
+            {"action": "read", "effect": "allow"},
+            {"action": "bash", "effect": "ask"},
+            {"action": "edit", "effect": "deny"},
+            {"action": "n8n_nccio_*", "effect": "allow"},
+            {"action": "playwright*", "effect": "ask"},
+        ]}, expected_hash=self._hash())
+        permission = json.loads(self.config.read_text())["agent"]["reviewer"]["permission"]
+        self.assertEqual(permission, {
+            "read": "allow", "bash": "ask", "edit": "deny",
+            "n8n_nccio_*": "allow", "playwright*": "ask",
+        })
+
+    def test_v1_inherit_with_no_existing_rule_writes_nothing(self):
+        self.write_config(json.dumps({"agent": {"reviewer": {
+            "description": "d", "mode": "subagent",
+        }}}))
+        before = self.config.read_text()
+        # Inherit markers with nothing to remove, and no other rules.
+        self.service.update_agent("reviewer", "v1", {"permissionRules": [
+            {"action": "read", "effect": "inherit"},
+        ]}, expected_hash=self._hash())
+        agent = json.loads(self.config.read_text())["agent"]["reviewer"]
+        self.assertNotIn("permission", agent)
+        self.assertNotIn("permissionRules", agent)
+        self.assertEqual(self.config.read_text(), before)  # Byte-identical: no-op.
+
+    def test_v1_create_all_inherit_agent_has_no_permission_block(self):
+        self.write_config(json.dumps({"agent": {}}))
+        result = self.service.create_agent("v1", {
+            "name": "fresh", "description": "New", "permissionRules": [],
+        }, expected_hash=self._hash())
+        self.assertEqual(result["changed"], True)
+        agent = json.loads(self.config.read_text())["agent"]["fresh"]
+        self.assertNotIn("permission", agent)
+
+    def test_v2_allow_ask_deny_persist_exact_effects_in_order(self):
+        self.write_config(json.dumps({"agents": {"reviewer": {
+            "description": "d", "mode": "subagent",
+        }}}))
+        self.service.update_agent("reviewer", "v2", {"permissionRules": [
+            {"action": "read", "effect": "allow", "resource": "*"},
+            {"action": "shell", "effect": "ask", "resource": "*"},
+            {"action": "edit", "effect": "deny", "resource": "*"},
+            {"action": "n8n_nccio_*", "effect": "allow", "resource": "*"},
+        ]}, expected_hash=self._hash())
+        permissions = json.loads(self.config.read_text())["agents"]["reviewer"]["permissions"]
+        self.assertEqual(permissions, [
+            {"action": "read", "effect": "allow", "resource": "*"},
+            {"action": "shell", "effect": "ask", "resource": "*"},
+            {"action": "edit", "effect": "deny", "resource": "*"},
+            {"action": "n8n_nccio_*", "effect": "allow", "resource": "*"},
+        ])
+
+    def test_preview_and_save_serialize_the_identical_permission_mutation_v1(self):
+        self.write_config(json.dumps({"agent": {"reviewer": {
+            "description": "d", "mode": "subagent",
+            "permission": {"edit": "deny", "bash": "ask"},
+        }}}))
+        fields = {"permissionRules": [
+            {"action": "edit", "effect": "inherit"},
+            {"action": "bash", "effect": "allow"},
+            {"action": "n8n_nccio_*", "effect": "deny"},
+        ]}
+        preview = self.service.preview_update("reviewer", "v1", fields)
+        self.service.update_agent("reviewer", "v1", fields, expected_hash=self._hash())
+        saved = json.loads(self.config.read_text())["agent"]["reviewer"]["permission"]
+        self.assertEqual(preview["new"]["permission"], saved)
+        self.assertEqual(saved, {"bash": "allow", "n8n_nccio_*": "deny"})
+
+    def test_preview_and_save_serialize_the_identical_permission_mutation_v2(self):
+        self.write_config(json.dumps({"agents": {"reviewer": {
+            "description": "d", "mode": "subagent",
+            "permissions": [
+                {"action": "shell", "resource": "git status", "effect": "allow"},
+                {"action": "future_tool", "resource": "*", "effect": "deny", "priority": 5},
+            ],
+        }}}))
+        fields = {"permissionRules": [
+            {"action": "future_tool", "effect": "deny", "resource": "*",
+             "rawValue": {"action": "future_tool", "resource": "*", "effect": "deny",
+                          "priority": 5}},
+            {"action": "edit", "effect": "deny", "resource": "*"},
+        ]}
+        preview = self.service.preview_update("reviewer", "v2", fields)
+        self.service.update_agent("reviewer", "v2", fields, expected_hash=self._hash())
+        saved = json.loads(self.config.read_text())["agents"]["reviewer"]["permissions"]
+        self.assertEqual(preview["new"]["permissions"], saved)
+        # Inherit-by-omission removed only git status; unknown fields survive.
+        self.assertEqual(saved, [
+            {"action": "future_tool", "resource": "*", "effect": "deny", "priority": 5},
+            {"action": "edit", "resource": "*", "effect": "deny"},
+        ])
+
+    def test_v1_permission_edit_preserves_surrounding_jsonc_comments(self):
+        # Task 12 surgical-edit contract: comments OUTSIDE the edited agent
+        # definition survive byte-identically; the edited definition itself is
+        # rewritten (its internal comments do not persist).
+        self.config.write_text(
+            "// top-level comment\n"
+            "{\n"
+            '  "agent": {\n'
+            "    // reviewer lives here\n"
+            '    "reviewer": {\n'
+            '      "description": "d",\n'
+            '      "mode": "subagent",\n'
+            '      "permission": { "edit": "deny" }\n'
+            "    },\n"
+            "    // sibling agent untouched\n"
+            '    "other": { "description": "keep" }\n'
+            "  }\n"
+            "}\n",
+            encoding="utf-8",
+        )
+        self.service.update_agent("reviewer", "v1", {"permissionRules": [
+            {"action": "edit", "effect": "allow"},
+        ]}, expected_hash=self._hash())
+        text = self.config.read_text()
+        self.assertIn("// top-level comment", text)
+        self.assertIn("// reviewer lives here", text)
+        self.assertIn("// sibling agent untouched", text)
+        data = json.loads(_strip_jsonc_comments(text))
+        self.assertEqual(data["agent"]["reviewer"]["permission"], {"edit": "allow"})
+        self.assertEqual(data["agent"]["other"], {"description": "keep"})
+
+
 if __name__ == "__main__":
     unittest.main()
 

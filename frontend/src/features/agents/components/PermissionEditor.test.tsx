@@ -429,3 +429,28 @@ describe("PermissionEditor — V2 MCP server-wide resource:* semantics", () => {
     expect(inputs.map((input) => input.value)).toEqual(["n8n_nccio_*"]);
   });
 });
+
+describe("PermissionEditor — effects help (Task 14B)", () => {
+  it("shows the compact inherit hint with broader-rules wording", () => {
+    renderEditor([], vi.fn());
+
+    const hint = screen.getByText(/no agent-level rule; OpenCode resolves it/i);
+    expect(hint).toHaveTextContent(/not from the calling agent/i);
+    expect(hint).toHaveTextContent(/broader\/global\/default rules/i);
+  });
+
+  it("expands to explain all four effects accurately", () => {
+    renderEditor([], vi.fn());
+
+    fireEvent.click(screen.getByText(/What do the effects mean\?/));
+    const list = screen.getByText(/Inherit — no agent-specific rule/).closest("ul");
+    expect(list).not.toBeNull();
+    const items = (list as HTMLUListElement).querySelectorAll("li");
+    expect(items).toHaveLength(4);
+    expect(items[0]).toHaveTextContent(/does NOT inherit from the calling agent/i);
+    expect(items[0]).toHaveTextContent(/resolve to Allow, Ask or Deny/i);
+    expect(items[1]).toHaveTextContent(/Allow — the matching operation runs without asking/i);
+    expect(items[2]).toHaveTextContent(/Ask — OpenCode pauses and asks for approval/i);
+    expect(items[3]).toHaveTextContent(/Deny — the matching operation is blocked/i);
+  });
+});

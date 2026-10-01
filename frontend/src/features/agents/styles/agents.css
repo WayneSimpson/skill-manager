@@ -235,10 +235,78 @@
 }
 
 /* Task 12: editor dialog and saved/pending-apply states. */
+/* Task 14B: agent-specific dialog override — substantially wider than the
+   generic 480px dialog, bounded by the viewport, internally scrollable with
+   an always-reachable action footer, and compacted to a two-column field
+   grid on desktop. Generic dialogs are untouched. */
+.agent-editor.dialog-content {
+  display: flex;
+  flex-direction: column;
+  width: min(1040px, calc(100vw - 48px));
+  max-height: min(88dvh, 92vh);
+  padding: 14px 20px 12px;
+  overflow: hidden; /* Internal region scrolls; the dialog itself never overflows. */
+}
+
+.agent-editor .dialog-header {
+  flex: none;
+  margin-bottom: 6px;
+}
+
+.agent-editor__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.agent-editor .dialog-actions {
+  flex: none;
+  position: sticky;
+  bottom: 0;
+  margin-top: 8px;
+  padding-top: 10px;
+  background: var(--color-surface-raised);
+}
+
 .agent-editor__form {
   display: grid;
-  gap: var(--space-3, 12px);
-  margin: var(--space-2, 8px) 0 var(--space-3, 12px) 0;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 16px;
+  margin: 6px 0 8px 0;
+}
+
+.agent-editor__form > * {
+  min-width: 0; /* Prevent grid blowout from long model IDs/wildcards. */
+}
+
+.agent-editor__field--wide {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 760px) {
+  .agent-editor.dialog-content {
+    width: calc(100vw - 24px);
+    max-height: 92dvh;
+    padding: 12px 12px 10px;
+  }
+
+  .agent-editor__form {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Permission tables stay usable on narrow widths: contained horizontal
+   scroll rather than viewport overflow. */
+.permission-editor__table {
+  width: 100%;
+}
+
+@media (max-width: 640px) {
+  .permission-editor__table {
+    display: block;
+    overflow-x: auto;
+  }
 }
 
 .agent-editor__form label {
@@ -451,6 +519,11 @@
   background: var(--surface-sunken, #101010);
 }
 
+.model-picker__option.is-highlighted {
+  background: var(--surface-sunken, #101010);
+  outline: 1px solid var(--border-strong, #444);
+}
+
 .model-picker__option--inherit {
   font-style: italic;
   color: var(--text-muted, #9a9a9a);
@@ -560,4 +633,30 @@
 .agent-editor__mode-hint {
   font-size: 0.75rem;
   color: var(--text-muted, #9a9a9a);
+}
+
+/* Task 14B: compact permission-effects help. */
+.permission-editor__effects-help {
+  margin: 0 0 8px;
+}
+
+.permission-editor__effects-help .permission-editor__hint {
+  margin: 0 0 4px;
+}
+
+.permission-editor__effects-details {
+  font-size: 0.78rem;
+  color: var(--text-muted, #9a9a9a);
+}
+
+.permission-editor__effects-details summary {
+  cursor: pointer;
+  color: var(--text-muted, #9a9a9a);
+}
+
+.permission-editor__effects-details ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 2px;
 }

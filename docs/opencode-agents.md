@@ -78,6 +78,20 @@ generation badge, shows Instructions and Reasoning/Variant as first-class
 fields, preserved additional options, permissions, and source/editability
 state, with an explicit read-only badge.
 
+## Permission effects semantics (Task 14B)
+
+OpenCode has three real permission effects: **Allow** runs the matching
+operation without prompting, **Ask** pauses for approval, **Deny** blocks it.
+Skill Manager's editor adds **Inherit** as a UI-only state: no agent-level
+override is written, and OpenCode resolves the permission from broader/global
+configuration and its built-in defaults. Inherit does NOT mean inheriting from
+the calling/parent agent, and it is not a restrictive preset — with no global
+permission block configured, an all-Inherit agent falls through to OpenCode's
+built-in defaults (most actions allowed; `external_directory`/`doom_loop` ask;
+`.env` files protected). The editor shows compact help stating exactly this,
+and an isolated-runtime test proves the fall-through through `opencode debug
+agent` itself against a disposable config.
+
 ## Reserved API route names
 
 Single-segment names that match static API routes under `/api/agents/opencode/`

@@ -204,6 +204,7 @@ export function AgentEditorDialog({ open, mode, onOpenChange, onSaved }: AgentEd
             </Dialog.Close>
           </div>
 
+          <div className="agent-editor__body ui-scrollbar">
           {step === "fields" ? (
             <div className="agent-editor__form">
               <label>
@@ -220,7 +221,7 @@ export function AgentEditorDialog({ open, mode, onOpenChange, onSaved }: AgentEd
                   onChange={(event) => update({ description: event.target.value })}
                 />
               </label>
-              <label>
+              <label className="agent-editor__field--wide">
                 <span>{copy.editor.fields.instructions}</span>
                 <textarea
                   rows={5}
@@ -228,7 +229,7 @@ export function AgentEditorDialog({ open, mode, onOpenChange, onSaved }: AgentEd
                   onChange={(event) => update({ instructions: event.target.value })}
                 />
               </label>
-              <div>
+              <div className="agent-editor__field">
                 <span>{copy.editor.fields.model}</span>
                 <ModelPicker
                   value={form.model}
@@ -285,13 +286,15 @@ export function AgentEditorDialog({ open, mode, onOpenChange, onSaved }: AgentEd
                   {isCreate ? copy.editor.subagentLocked : copy.editor.modeHint}
                 </em>
               </label>
-              <PermissionEditor
-                generation={generation}
-                rules={form.permissionRules}
-                onChange={handlePermissionsChange}
-                mcpServers={mcpQuery.data?.servers}
-                mcpSource={mcpQuery.data?.source}
-              />
+              <div className="agent-editor__field--wide">
+                <PermissionEditor
+                  generation={generation}
+                  rules={form.permissionRules}
+                  onChange={handlePermissionsChange}
+                  mcpServers={mcpQuery.data?.servers}
+                  mcpSource={mcpQuery.data?.source}
+                />
+              </div>
             </div>
           ) : (
             <div className="agent-editor__preview">
@@ -305,6 +308,7 @@ export function AgentEditorDialog({ open, mode, onOpenChange, onSaved }: AgentEd
 
           {error ? <p className="agent-editor__error" role="alert">{error}</p> : null}
           {savedNote ? <p className="agent-editor__saved">{copy.editor.savedToast}</p> : null}
+          </div>
 
           <div className="dialog-actions">
             {step === "preview" ? (

@@ -276,3 +276,27 @@ describe("AgentEditorDialog — model picker drives variant options", () => {
     expect((variantSelect as HTMLSelectElement).value).toBe("high");
   });
 });
+
+describe("AgentEditorDialog — responsive layout structure (Task 14B)", () => {
+  it("renders the wide dialog with an internal scroll body and reachable footer actions", () => {
+    renderDialog({ kind: "create", generation: "v1" });
+
+    // Radix portals the dialog into document.body.
+    const dialog = document.body.querySelector(".dialog-content.agent-editor");
+    expect(dialog).not.toBeNull();
+
+    // Content scrolls internally inside a bounded body region...
+    const body = dialog?.querySelector(".agent-editor__body");
+    expect(body).not.toBeNull();
+
+    // ...while the action footer stays outside the scroll region.
+    const actions = dialog?.querySelector(".dialog-actions");
+    expect(actions).not.toBeNull();
+    expect(body?.contains(actions as Node)).toBe(false);
+
+    // Two-column grid fields with wide spans present.
+    const form = dialog?.querySelector(".agent-editor__form");
+    expect(form?.className).not.toContain("agent-editor__form--single");
+    expect(dialog?.querySelector(".agent-editor__field--wide")).not.toBeNull();
+  });
+});

@@ -184,9 +184,22 @@ export function PermissionEditor({
   }
 
   const mcpCopy = copy.editor.permissions.mcp;
+  const effectsHelp = copy.editor.permissions.effectsHelp;
 
   return (
     <div className="permission-editor">
+      <div className="permission-editor__effects-help">
+        <p className="permission-editor__hint">{effectsHelp.inheritHint}</p>
+        <details className="permission-editor__effects-details">
+          <summary>{effectsHelp.title}</summary>
+          <ul>
+            <li>{effectsHelp.inherit}</li>
+            <li>{effectsHelp.allow}</li>
+            <li>{effectsHelp.ask}</li>
+            <li>{effectsHelp.deny}</li>
+          </ul>
+        </details>
+      </div>
       <table className="permission-editor__table" aria-label={copy.editor.permissions.title}>
         <thead>
           <tr>
